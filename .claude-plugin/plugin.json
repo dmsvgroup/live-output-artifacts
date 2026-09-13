@@ -1,7 +1,7 @@
 {
   "name": "live-output-artifacts",
-  "version": "1.8.0",
-  "description": "Bundles your IR MCP server with live-artifact skills: auto-render any agent output as a live Cowork artifact, a Rockstar Agents command center (agents, skills, tools, plus an Outputs tab listing every deliverable your agents produced — filterable by client, agent, and skill), and a Rockstar chat panel.",
+  "version": "1.9.0",
+  "description": "Bundles your IR MCP server with live-artifact skills: auto-render any agent output as a live Cowork artifact, a Rockstar Agents command center (agents, skills, tools, plus an Outputs tab listing every deliverable your agents produced — filterable by client, agent, and skill), a Rockstar chat panel, and a Digital DNA workflow that scans your AI history into a MyGentic brain (persona / knowledge / skills), connects it over MCP, and proves the lift with a live before-vs-after scorecard.",
   "author": {
     "name": "Hotei Media Production",
     "email": "hotei.media.production@gmail.com"
@@ -9,9 +9,12 @@
   "repository": "https://github.com/Sunil3696/live-output-artifacts",
   "license": "MIT",
   "keywords": [
-    "mcp",
-    "live-artifact",
     "cowork",
-    "llm-output"
+    "digital-dna",
+    "live-artifact",
+    "llm-output",
+    "mcp",
+    "mygentic",
+    "personalization"
   ]
 }

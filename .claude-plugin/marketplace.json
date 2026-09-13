@@ -10,13 +10,15 @@
     {
       "name": "live-output-artifacts",
       "source": "./",
-      "version": "1.8.0",
-      "description": "Live Cowork artifacts for IR MCP \u2014 auto-render agent output, a Rockstar Agents command center (now with an Outputs tab of every deliverable, by client/agent/skill), and a chat panel.",
+      "version": "1.9.0",
+      "description": "Live Cowork artifacts for IR MCP — auto-render agent output, a Rockstar Agents command center (with an Outputs tab of every deliverable, by client/agent/skill), a chat panel, and a Digital DNA workflow: scan your AI history into a MyGentic brain and score the before/after lift live.",
       "category": "productivity",
       "keywords": [
-        "mcp",
+        "cowork",
+        "digital-dna",
         "live-artifact",
-        "cowork"
+        "mcp",
+        "mygentic"
       ]
     }
   ]

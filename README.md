@@ -12,11 +12,26 @@ live-output-artifacts/
 │   ├── plugin.json          # plugin manifest
 │   └── marketplace.json     # marketplace listing (for publishing)
 ├── .mcp.json                # ir-mcp server (remote HTTP)
+├── commands/
+│   ├── agents-home.md       # /agents-home
+│   ├── rockstar-chat.md     # /rockstar-chat
+│   └── digital-dna.md       # /digital-dna [shallow|deep] [scan|build|connect|validate]
 ├── skills/
-│   └── render-live-artifact/
-│       ├── SKILL.md         # drives the auto-artifact behavior
+│   ├── render-live-artifact/
+│   │   ├── SKILL.md         # drives the auto-artifact behavior
+│   │   └── templates/live-artifact.html
+│   ├── rockstar-agents-home/  # command center + Outputs tab
+│   ├── rockstar-chat/         # chat panel wired to the rockstar orchestrator
+│   └── digital-dna/
+│       ├── SKILL.md         # SCAN → BUILD → CONNECT → VALIDATE
+│       ├── reference/
+│       │   ├── dna-scan-prompt.md   # paste into Claude/ChatGPT; MODE: shallow|deep
+│       │   └── connect-guide.md     # MCP link → Claude connector / ChatGPT (Streamable) → Authenticate
 │       └── templates/
-│           └── live-artifact.html
+│           ├── persona.md   # pasted into the Brain Builder co-pilot
+│           ├── knowledge.md # uploaded via Attachments
+│           ├── brain_scan.md# the first skill — pasted, never uploaded
+│           └── dna-scorecard.html   # live with-brain vs without-brain scorecard
 └── README.md
 ```
 
@@ -56,6 +71,23 @@ If your server uses SSE rather than streamable HTTP, change `"type": "http"` to
 
 After install, the MCP server connects and the skill activates automatically —
 when any `ir-mcp` orchestrator produces output, Claude renders it as a live artifact.
+
+## Digital DNA (personalized output via a MyGentic brain)
+
+LLMs lose context in long chats and drift into generic, "AI-sounding" text. A MyGentic
+brain is a permanent, token-efficient knowledge graph the LLM queries over MCP instead of
+re-reading your history. `/digital-dna` runs the four stages:
+
+1. **Scan** your AI history (`shallow` first, `deep` on the rerun) into three files —
+   `persona.md` (goal + voice), `knowledge.md` (why + what), `brain_scan.md` (how + now, a
+   skill). Edit them for accuracy before ingestion.
+2. **Build** the brain in the MyGentic Brain Builder: persona pasted into the co-pilot,
+   knowledge uploaded via Attachments, skills pasted as text (uploading makes them knowledge).
+3. **Connect** the brain's MCP link (Publish section) as a Claude custom connector or a
+   ChatGPT connector with Streamable on, then click **Connect / Authenticate**.
+4. **Validate** with the live scorecard artifact: one prompt, generated with and without the
+   brain, blind-scored 0–100% on voice, audience, offers, AI-isms, and actionability. The
+   reference demo scored 70% with the brain vs 24% without.
 
 ## A note on "live" + LLM output
 
