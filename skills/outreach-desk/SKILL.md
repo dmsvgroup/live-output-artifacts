@@ -19,7 +19,8 @@ and these capabilities:
   "mcp": { "servers": [
     { "server": "Gmail", "tools": ["search_threads", "get_thread", "create_draft"] },
     { "server": "Google Calendar", "tools": ["list_events"] },
-    { "server": "Claude N8N", "tools": ["search_workflows", "search_workflow_executions"] } ] } }
+    { "server": "Claude N8N", "tools": ["search_workflows", "search_workflow_executions"] },
+    { "server": "Microsoft 365", "tools": ["outlook_calendar_search", "outlook_email_search", "outlook_create_draft"] } ] } }
 ```
 
 - **db** holds `settings/main`, `contacts/*`, `queue/*` (drafts awaiting approval),
@@ -31,7 +32,8 @@ and these capabilities:
 - **mcp** reads recent inbox threads and replies from CRM addresses, reads a thread in
   full for follow-ups, and creates Gmail drafts on approval. Calendar lists upcoming
   events. Every failure is branched by error code; the page degrades per section.
-- **From Gmail** (Contacts toolbar): scans `in:sent` threads over a chosen window (up to 6 pages of 50), collects recipients, filters out no-reply and platform addresses, dedupes against the CRM, and adds the ticked people as Warm Leads with a note (emails exchanged, last date, latest subject). Names are guessed from the address.
+- **Microsoft 365**: the signed-in mailbox is the sending address (Drake@meta-dology.com), so drafts are created in Outlook by default (Settings → Create drafts in). Outlook calendar (next 14 days) merges with Google Calendar, deduped by title and start; Outlook inbox (7 days) merges into Inbox and replies are matched to CRM addresses. Multi-block results are parsed with `blocks()`; `outlook_create_draft` returns plain text with `id:` and `webLink:` lines.
+- **From sent mail** (Contacts toolbar, Outlook or Gmail): scans `in:sent` threads over a chosen window (up to 6 pages of 50), collects recipients, filters out no-reply and platform addresses, dedupes against the CRM, and adds the ticked people as Warm Leads with a note (emails exchanged, last date, latest subject). Names are guessed from the address.
 - **Agents tab**: watches the n8n connector (`search_workflows` every 2 min, `search_workflow_executions` every 1 min) and shows each Rockstar agent's state, last run, 24-hour success/failure counts, and the 30 most recent runs. Today carries a compact "Agents running" card. Hosted mode shows a not-linked notice.
 - Without `db` the page runs local-only (browser storage); without `mcp` it still drafts
   and approves, and the user copies text into Gmail or LinkedIn.

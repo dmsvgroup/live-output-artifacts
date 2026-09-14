@@ -214,6 +214,7 @@
     <span class="c" id="c-db"><i></i><span>Store</span></span>
     <span class="c" id="c-sample"><i></i><span>Claude</span></span>
     <span class="c" id="c-gmail"><i></i><span>Gmail</span></span>
+    <span class="c" id="c-outlook"><i></i><span>Outlook</span></span>
     <span class="c" id="c-cal"><i></i><span>Calendar</span></span>
   </div>
 </header>
@@ -267,7 +268,7 @@
         <button class="btn sm" type="button" id="btn-analyze" title="Match an offer and angle to the selected contacts">Analyze selected</button>
         <button class="btn sm" type="button" id="btn-draft-sel">Draft selected</button>
         <button class="btn sm" type="button" id="btn-import">Import rows</button>
-        <button class="btn sm" type="button" id="btn-gmail" title="People you have emailed, from your sent mail">From Gmail</button>
+        <button class="btn sm" type="button" id="btn-gmail" title="People you have emailed, from your sent mail">From sent mail</button>
         <button class="btn sm" type="button" id="btn-export">Export for RocketFuel</button>
         <button class="btn sm primary" type="button" id="btn-add">Add contact</button>
       </div>
@@ -342,10 +343,11 @@
   <div class="foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="imp-go">Import</button></div>
 </div></div>
 
-<div class="modal" id="m-gmail"><div class="box"><div class="ch"><h3>Add contacts from Gmail</h3><button class="btn sm" type="button" data-close>Close</button></div>
+<div class="modal" id="m-gmail"><div class="box"><div class="ch"><h3>Add contacts from sent mail</h3><button class="btn sm" type="button" data-close>Close</button></div>
   <div class="cb">
     <p class="note">Scans the mail you sent and lists the people on the other end. These are your warmest pocket: real conversations, not a scrape. Names are guessed from the address, so edit them after adding.</p>
     <div class="filters" style="margin:10px 0">
+      <label for="gm-src" class="eyebrow">Mailbox</label><select id="gm-src"><option value="outlook">Outlook · Drake@meta-dology.com</option><option value="gmail">Gmail</option></select>
       <label for="gm-range" class="eyebrow">Window</label><select id="gm-range"><option value="30d">Last 30 days</option><option value="90d" selected>Last 90 days</option><option value="180d">Last 6 months</option><option value="1y">Last year</option></select>
       <button class="btn sm primary" type="button" id="gm-scan">Scan sent mail</button>
       <span class="note" id="gm-status"></span>
@@ -360,7 +362,8 @@
 <div class="modal" id="m-settings"><div class="box"><div class="ch"><h3>Settings</h3><button class="btn sm" type="button" data-close>Close</button></div>
   <div class="cb form">
     <div class="field"><label for="s-name">Sender name</label><input id="s-name"></div><div class="field"><label for="s-email">Sending address</label><input id="s-email"></div>
-    <div class="field full"><label for="s-tag">Signature tagline (one line)</label><input id="s-tag"></div>
+    <div class="field"><label for="s-mailbox">Create drafts in</label><select id="s-mailbox"><option value="outlook">Outlook (Microsoft 365)</option><option value="gmail">Gmail</option></select></div>
+    <div class="field"><label for="s-tag">Signature tagline (one line)</label><input id="s-tag"></div>
     <div class="field full"><label for="s-offers">Offers, one per line: name — who it's for — outcome</label><textarea id="s-offers"></textarea></div>
     <div class="field full"><label for="s-magnet">Free thing to give (lead magnet, Loom, audit). One link max.</label><input id="s-magnet"></div>
     <div class="field"><label for="s-start">Ramp start date</label><input id="s-start" type="date"></div>
@@ -416,7 +419,7 @@ const CLICHES = ["i hope this email finds you well","i hope this finds you well"
 const FOLLOWUP_STEPS = ["ANSWER QUESTION","SEND LEAD MAGNET","SEND CALENDAR","ACKNOWLEDGE NO","CONTINUE CONVERSATION","NO FOLLOW-UP NEEDED"];
 const DEFAULT_SETTINGS = { sender:{ name:"Drake Shields", email:"drake@meta-dology.com", tagline:"Preconstruction clarity, stakeholder alignment, and risk reduction through immersive digital twins." },
   offers:"Meta-dology — developers, EPCs, owners who need to see the project before it is built — visual planning and digital-twin clarity that aligns stakeholders and cuts rework\nDMSV Group — estimating, project controls and operations leaders — AI readiness, estimating intelligence and workflow automation that helps teams run it smarter",
-  magnet:"", rampStart:"", dailyCap:10, batchSize:1, cleanStreak:0, totalClean:0, domainAuth:"unknown", n8nUrl:"https://dmsvgroup.app.n8n.cloud" };
+  magnet:"", rampStart:"", dailyCap:10, batchSize:1, cleanStreak:0, totalClean:0, domainAuth:"unknown", n8nUrl:"https://dmsvgroup.app.n8n.cloud", mailbox:"outlook" };
 
 /* ============ helpers ============ */
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -460,7 +463,7 @@ const store = {
 };
 
 /* ============ state ============ */
-const S = { view:"today", settings:{ ...DEFAULT_SETTINGS }, contacts:[], queue:[], projects:[], videos:[], activity:[], log:{ items:[] }, events:[], evFresh:null, replies:[], repFresh:null, inbox:[], inbFresh:null, workflows:[], runs:[], agFresh:null, agState:"unknown", sel:new Set(), sample:null, mcp:null, downloads:null, mcpOk:{ gmail:"unknown", cal:"unknown" }, busy:false, editing:null };
+const S = { view:"today", settings:{ ...DEFAULT_SETTINGS }, contacts:[], queue:[], projects:[], videos:[], activity:[], log:{ items:[] }, events:[], evFresh:null, replies:[], repFresh:null, inbox:[], inbFresh:null, workflows:[], runs:[], agFresh:null, agState:"unknown", sel:new Set(), sample:null, mcp:null, downloads:null, mcpOk:{ gmail:"unknown", cal:"unknown", outlook:"unknown" }, oEvents:[], oInbox:[], oFresh:null, busy:false, editing:null };
 
 
 /* ============ hosted mode (page served from your own web server, no claude.ai runtime) ============ */
@@ -486,6 +489,10 @@ function apiSample(){
   fn.limits = async () => ({ maxPromptBytes:65536 });
   return fn;
 }
+function blocks(result){ const out = []; ((result && result.content) || []).forEach(b => { if (b.type !== "text") return; try { const j = JSON.parse(b.text); if (j && typeof j === "object" && !Array.isArray(j)) out.push(j); } catch {} }); return out.filter(j => j.id || j.subject); }
+function outlookComposeUrl(to, subject, body){ return "https://outlook.office.com/mail/deeplink/compose?to=" + encodeURIComponent(to || "") + "&subject=" + encodeURIComponent(subject || "") + "&body=" + encodeURIComponent(body || ""); }
+const useOutlook = () => (S.settings.mailbox || "outlook") === "outlook";
+function outlookCopy(e){ const code = e && e.code; if (code === "needs_reauth") return "Reconnect Microsoft 365 in claude.ai Settings → Connectors."; if (code === "server_not_connected") return "Add Microsoft 365 in claude.ai Settings → Connectors."; if (code === "not_in_manifest") return "Microsoft 365 isn't allowed for this page in this view."; if (code === "tool_error") return "Outlook refused the draft: " + (e.message || ""); if (code === "server_unavailable") return "Outlook didn't answer. Try again in a moment."; return "Outlook call failed: " + (e && (e.message || code) || "unknown"); }
 function gmailComposeUrl(to, subject, body){ return "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(to || "") + "&su=" + encodeURIComponent(subject || "") + "&body=" + encodeURIComponent(body || ""); }
 
 /* ============ activity + log ============ */
@@ -534,7 +541,7 @@ function renderToday(){
   $("#moves").innerHTML = moves.length ? moves.map(m => `<div class="row">${m.av ? `<div class="av ${stageClass(m.av.stage)}">${initials(m.av)}</div>` : `<div class="av cold">·</div>`}<div><div class="t">${esc(m.t)}</div><div class="d">${esc(m.d)}</div></div><div>${m.btn}</div></div>`).join("") : `<div class="empty"><b>Nothing waiting</b>Analyze a few contacts and draft the first email.</div>`;
   $("#feed-short").innerHTML = feedHTML(S.activity.slice(0, 6));
   renderAgentsShort();
-  $("#cal-short").innerHTML = eventsHTML(S.events.slice(0, 4), true);
+  $("#cal-short").innerHTML = eventsHTML(allEvents().slice(0, 4), true);
   $("#cal-fresh").textContent = S.evFresh ? "updated " + ago(S.evFresh) : (S.mcpOk.cal === "unknown" ? "" : S.mcpOk.cal);
   const g = [];
   g.push({ c:"ok", t:"Approval before every send. The batch size grows; the gate never goes away." });
@@ -573,7 +580,7 @@ function renderApprovals(){
       <div class="why"><b>Why this angle:</b> ${esc(q.why || "")}${q.replySnippet ? `<br><b>They wrote:</b> “${esc(q.replySnippet)}”` : ""}</div>
     </div>
     <div class="actions" style="margin-top:12px">
-      <button class="btn primary" type="button" id="a-approve">${realEmail(c.email) ? (S.mcp ? "Approve → create Gmail draft" : "Approve → open in Gmail") : "Approve → copy for LinkedIn"}</button>
+      <button class="btn primary" type="button" id="a-approve">${realEmail(c.email) ? (S.mcp ? (useOutlook() ? "Approve → create Outlook draft" : "Approve → create Gmail draft") : (useOutlook() ? "Approve → open in Outlook" : "Approve → open in Gmail")) : "Approve → copy for LinkedIn"}</button>
       <button class="btn" type="button" id="a-save">Save edits</button>
       <button class="btn" type="button" id="a-skip">Skip contact</button>
       <button class="btn" type="button" id="a-regen" ${S.sample ? "" : "disabled"}>Regenerate</button>
@@ -612,13 +619,18 @@ async function approve(q){
   const edited = subject !== q.subject || body !== q.body, heavy = edited && (Math.abs(words(body) - words(q.body)) > 15 || subject !== q.subject);
   try {
     let gmailDraftId = null, note = "";
-    if (realEmail(c.email) && S.mcp){
+    if (realEmail(c.email) && S.mcp && useOutlook()){
+      st.innerHTML = '<span class="spin"></span> creating Outlook draft…';
+      const full = body + "\n\n" + S.settings.sender.name + "\n" + (S.settings.sender.tagline || "");
+      try { const r = await S.mcp.callTool("Microsoft 365", "outlook_create_draft", { to:[c.email], subject, body:full, bodyType:"text" }); const txt = ((r.content || []).find(b => b.type === "text") || {}).text || String(r.payload || ""); const idm = txt.match(/id:\s*(\S+)/), lm = txt.match(/webLink:\s*(\S+)/); gmailDraftId = idm ? "outlook:" + idm[1] : "outlook"; note = "Outlook draft created"; if (lm) window._lastDraftLink = lm[1]; S.mcpOk.outlook = "connected"; }
+      catch (e){ note = outlookCopy(e); if (!confirm(note + "\nApprove without an Outlook draft?")){ st.textContent = note; S.busy = false; return; } }
+    } else if (realEmail(c.email) && S.mcp){
       st.innerHTML = '<span class="spin"></span> creating Gmail draft…';
       const input = { to:[c.email], subject, body: body + "\n\n" + S.settings.sender.name + "\n" + (S.settings.sender.tagline || "") };
       if (q.replyToMessageId) input.replyToMessageId = q.replyToMessageId;
       try { const r = await S.mcp.callTool("Gmail", "create_draft", input); const p = r.payload || {}; gmailDraftId = p.id || null; note = "Gmail draft created"; S.mcpOk.gmail = "connected"; }
       catch (e){ note = gmailCopy(e); if (!confirm(note + "\nApprove without a Gmail draft?")){ st.textContent = note; S.busy = false; return; } }
-    } else if (realEmail(c.email)){ const full = body + "\n\n" + S.settings.sender.name + "\n" + (S.settings.sender.tagline || ""); window.open(gmailComposeUrl(c.email, subject, full), "_blank", "noopener"); note = "Opened in Gmail compose"; }
+    } else if (realEmail(c.email)){ const full = body + "\n\n" + S.settings.sender.name + "\n" + (S.settings.sender.tagline || ""); window.open(useOutlook() ? outlookComposeUrl(c.email, subject, full) : gmailComposeUrl(c.email, subject, full), "_blank", "noopener"); note = useOutlook() ? "Opened in Outlook compose" : "Opened in Gmail compose"; }
     else { try { await navigator.clipboard.writeText(body); note = "Copied for LinkedIn"; } catch { note = "Approved; copy the body for LinkedIn"; } }
     await store.update("queue", q.id, { status:"approved", subject, body, edited, gmailDraftId, approvedAt:Date.now() });
     await store.update("contacts", q.contactId, { status: gmailDraftId ? "Drafted" : "Sent", lastContact:todayKey(), nextFollowUp: addDays(q.type === "followup" ? 5 : 7) });
@@ -627,6 +639,7 @@ async function approve(q){
     const patch = clean ? { cleanStreak:(s.cleanStreak || 0) + 1, totalClean:(s.totalClean || 0) + 1 } : { cleanStreak:0, batchSize: s.batchSize > 1 ? (s.batchSize == 10 ? 5 : 1) : 1 };
     await store.update("settings", "main", patch);
     await act("you", `Approved ${q.type === "followup" ? "follow-up" : "email"} to ${fullName(c)}${edited ? " (edited)" : ""} · ${note}`, "approve");
+    if (window._lastDraftLink){ const l = window._lastDraftLink; window._lastDraftLink = null; setTimeout(() => { if (confirm("Outlook draft created. Open it now?")) window.open(l, "_blank", "noopener"); }, 50); }
     current = null; toast(note); st.textContent = "";
   } catch (e){ st.textContent = "Couldn't save: " + (e.message || e.code || e); }
   S.busy = false;
@@ -751,22 +764,25 @@ function renderInbox(){
   $("#inb-fresh").textContent = S.inbFresh ? "updated " + ago(S.inbFresh) : "";
   if (!S.mcp){ $("#replies").innerHTML = `<div class="empty"><b>${HOSTED ? "Replies are not linked on the web version" : "Gmail isn't reachable in this view"}</b>${HOSTED ? 'Approvals open a prefilled Gmail compose window. To answer a reply, use Today → Draft follow-up and paste what they wrote. <a href="https://mail.google.com" target="_blank" rel="noopener">Open Gmail</a>' : "Open the page in claude.ai with the Gmail connector to see replies here. You can still paste a reply from Today → Draft follow-up."}</div>`; $("#inbox").innerHTML = ""; return; }
   if (!emails.length){ $("#replies").innerHTML = `<div class="empty"><b>No contacts with a real email yet</b>Replies are matched by sender address. Add emails to your contacts to watch for them.</div>`; }
-  else $("#replies").innerHTML = S.replies.length ? S.replies.map(t => { const c = emails.find(x => x.email.toLowerCase() === t.email); return `<div class="row"><div class="av ${stageClass(c && c.stage)}">${c ? initials(c) : "?"}</div><div><div class="t">${esc(c ? fullName(c) : t.email)} <span class="note">· ${esc(t.subject)}</span></div><div class="d">${esc(t.snippet)}</div></div><div class="actions"><span class="note">${fmtDate(t.date)}</span>${c ? `<button class="btn sm" type="button" data-markreply="${c.id}">Follow up</button>` : ""}</div></div>`; }).join("") : `<div class="empty"><b>No replies yet</b>Watching ${emails.length} address${emails.length === 1 ? "" : "es"} over the last 30 days.</div>`;
-  $("#inbox").innerHTML = S.inbox.length ? S.inbox.map(t => `<div class="row"><div class="av cold">${esc((t.sender || "?")[0].toUpperCase())}</div><div><div class="t">${esc(t.subject || "(no subject)")}</div><div class="d">${esc(t.sender)} · ${esc(t.snippet)}</div></div><div class="note">${fmtDate(t.date)}</div></div>`).join("") : `<div class="empty">${S.mcpOk.gmail === "unknown" ? "Loading inbox…" : "Nothing in the last 7 days outside promotions and social."}</div>`;
+  else { const oRep = S.oInbox.filter(t => emails.some(c => c.email.toLowerCase() === t.email)).map(t => ({ ...t, source:"outlook" })); const all = [...S.replies.map(t => ({ ...t, source:"gmail" })), ...oRep].sort((a,b) => String(b.date).localeCompare(String(a.date)));
+  $("#replies").innerHTML = all.length ? all.map(t => { const c = emails.find(x => x.email.toLowerCase() === t.email); return `<div class="row"><div class="av ${stageClass(c && c.stage)}">${c ? initials(c) : "?"}</div><div><div class="t">${esc(c ? fullName(c) : t.email)} <span class="note">· ${esc(t.subject)}</span></div><div class="d">${esc(t.snippet)}</div></div><div class="actions"><span class="note">${fmtDate(t.date)}</span><span class="tag ${t.source === "outlook" ? "info" : ""}">${t.source === "outlook" ? "Outlook" : "Gmail"}</span>${c ? `<button class="btn sm" type="button" data-markreply="${c.id}" data-src="${t.source}" data-summary="${esc(t.snippet)}">Follow up</button>` : ""}</div></div>`; }).join("") : `<div class="empty"><b>No replies yet</b>Watching ${emails.length} address${emails.length === 1 ? "" : "es"} over the last 30 days.</div>`; }
+  const merged = [...S.inbox.map(t => ({ ...t, source:"gmail" })), ...S.oInbox].sort((a,b) => String(b.date).localeCompare(String(a.date)));
+  $("#inbox").innerHTML = merged.length ? merged.slice(0, 40).map(t => `<div class="row"><div class="av cold">${esc((t.sender || "?")[0].toUpperCase())}</div><div><div class="t">${esc(t.subject || "(no subject)")} <span class="tag ${t.source === "outlook" ? "info" : ""}">${t.source === "outlook" ? "Outlook" : "Gmail"}</span></div><div class="d">${esc(t.sender)} · ${esc(t.snippet)}</div></div><div class="note">${fmtDate(t.date)}${t.webLink ? ` · <a href="${esc(t.webLink)}" target="_blank" rel="noopener">open</a>` : ""}</div></div>`).join("") : `<div class="empty">${S.mcpOk.gmail === "unknown" && S.mcpOk.outlook === "unknown" ? "Loading inbox…" : "Nothing in the last 7 days."}</div>`;
 }
-document.addEventListener("click", async e => { const b = e.target.closest("[data-markreply]"); if (!b) return; const c = S.contacts.find(x => x.id === b.dataset.markreply); if (!c) return; await store.update("contacts", c.id, { status:"Replied" }); startFollowUp(c); });
+document.addEventListener("click", async e => { const b = e.target.closest("[data-markreply]"); if (!b) return; const c = S.contacts.find(x => x.id === b.dataset.markreply); if (!c) return; await store.update("contacts", c.id, { status:"Replied" }); if (b.dataset.src === "outlook"){ const t = prompt(`Paste ${c.first || fullName(c)}'s full reply. The Outlook preview is filled in; leave it to use the preview:`, b.dataset.summary || ""); if (t === null) return; await draftFollowUp(c, t, null); } else startFollowUp(c); });
 function flattenThreads(payload){ const th = (payload && payload.threads) || []; return th.map(t => { const m = (t.messages || [])[0] || {}; const last = (t.messages || [])[t.messages.length - 1] || m; return { id:t.id, subject:m.subject || "", snippet:(last.snippet || m.snippet || "").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&"), sender:String(last.sender || m.sender || ""), email:(String(last.sender || m.sender || "").match(/[\w.+-]+@[\w.-]+/) || [""])[0].toLowerCase(), date:last.date || m.date }; }); }
 
 /* ============ calendar ============ */
 function eventsHTML(evs, short){
   if (!S.mcp) return `<div class="empty">${short ? (HOSTED ? '<a href="https://calendar.google.com" target="_blank" rel="noopener">Open Google Calendar</a>' : "Calendar not reachable in this view.") : (HOSTED ? '<b>Calendar is not linked on the web version</b><a href="https://calendar.google.com" target="_blank" rel="noopener">Open Google Calendar</a> · the claude.ai copy of this page shows meetings inline.' : "<b>Google Calendar isn't reachable in this view</b>Open the page in claude.ai with the Google Calendar connector.")}</div>`;
-  if (!evs.length) return `<div class="empty">${S.mcpOk.cal === "unknown" ? "Loading…" : S.mcpOk.cal === "connected" ? "Nothing scheduled." : esc(S.mcpOk.cal)}</div>`;
-  return evs.map(ev => { const st = ev.start && (ev.start.dateTime || ev.start.date) || "", d = new Date(st), allDay = !(ev.start && ev.start.dateTime);
+  if (!evs.length) return `<div class="empty">${S.mcpOk.cal === "unknown" && S.mcpOk.outlook === "unknown" ? "Loading…" : (S.mcpOk.cal === "connected" || S.mcpOk.outlook === "connected") ? "Nothing scheduled." : esc(S.mcpOk.cal + " · " + S.mcpOk.outlook)}</div>`;
+  return evs.map(ev => { const st = ev.start && (ev.start.dateTime || ev.start.date) || "", d = new Date(st), allDay = !!ev.allDay || !(ev.start && ev.start.dateTime);
     const att = (ev.attendees || []).filter(a => !a.self), known = att.map(a => S.contacts.find(c => c.email && c.email.toLowerCase() === String(a.email).toLowerCase())).filter(Boolean);
-    return `<div class="ev"><div class="when"><b>${isNaN(d) ? "" : d.toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" })}</b>${allDay ? "all day" : fmtTime(st)}</div><div><div class="t">${esc(ev.summary || "(untitled)")}</div><div class="d">${att.length ? att.length + " guest" + (att.length > 1 ? "s" : "") : (ev.organizer && ev.organizer.displayName ? esc(ev.organizer.displayName) : "")}${known.length ? ` · <span class="tag acc">${known.map(fullName).map(esc).join(", ")} in CRM</span>` : ""}${ev.conferenceUrl || ev.location ? ` · <a href="${esc(ev.conferenceUrl || ev.location)}" target="_blank" rel="noopener">join</a>` : ""}</div></div><div>${short ? "" : `<button class="btn sm" type="button" data-prep="${esc(ev.id)}" ${S.sample ? "" : "disabled"}>Prep</button>`}</div></div>`; }).join("");
+    return `<div class="ev"><div class="when"><b>${isNaN(d) ? "" : d.toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" })}</b>${allDay ? "all day" : fmtTime(st)}</div><div><div class="t">${esc(ev.summary || "(untitled)")}</div><div class="d">${att.length ? att.length + " guest" + (att.length > 1 ? "s" : "") : (ev.organizer && ev.organizer.displayName ? esc(ev.organizer.displayName) : "")}${known.length ? ` · <span class="tag acc">${known.map(fullName).map(esc).join(", ")} in CRM</span>` : ""}${ev.conferenceUrl || (ev.location && /^https?:/.test(ev.location)) ? ` · <a href="${esc(ev.conferenceUrl || ev.location)}" target="_blank" rel="noopener">join</a>` : ev.location ? ` · ${esc(ev.location)}` : ""}${ev.source === "outlook" ? ` · <span class="tag info">Outlook</span>` : ` · <span class="tag">Google</span>`}${ev.webLink ? ` · <a href="${esc(ev.webLink)}" target="_blank" rel="noopener">open</a>` : ""}</div></div><div>${short ? "" : `<button class="btn sm" type="button" data-prep="${esc(ev.id)}" ${S.sample ? "" : "disabled"}>Prep</button>`}</div></div>`; }).join("");
 }
-function renderCalendar(){ $("#cal-full").innerHTML = eventsHTML(S.events, false); $("#cal-fresh2").textContent = $("#cal-fresh").textContent; }
-document.addEventListener("click", async e => { const b = e.target.closest("[data-prep]"); if (!b) return; const ev = S.events.find(x => x.id === b.dataset.prep); if (!ev || !S.sample) return;
+function allEvents(){ const seen = new Set(), out = []; [...S.events.map(e => ({ ...e, source:"google" })), ...S.oEvents].forEach(e => { const st = e.start && (e.start.dateTime || e.start.date) || ""; const key = String(e.summary || "").toLowerCase().trim() + "|" + st.slice(0, 16); if (seen.has(key)) return; seen.add(key); out.push(e); }); const ts = e => { const v = e.start && (e.start.dateTime || e.start.date) || ""; const d = new Date(v.length === 10 ? v + "T00:00:00" : v); return isNaN(d) ? 0 : d.getTime(); }; return out.sort((a,b) => ts(a) - ts(b)); }
+function renderCalendar(){ $("#cal-full").innerHTML = eventsHTML(allEvents(), false); $("#cal-fresh2").textContent = $("#cal-fresh").textContent; }
+document.addEventListener("click", async e => { const b = e.target.closest("[data-prep]"); if (!b) return; const ev = allEvents().find(x => x.id === b.dataset.prep); if (!ev || !S.sample) return;
   const att = (ev.attendees || []).filter(a => !a.self), known = att.map(a => S.contacts.find(c => c.email && c.email.toLowerCase() === String(a.email).toLowerCase())).filter(Boolean);
   const box = $("#prep"); box.innerHTML = `<div class="note"><span class="spin"></span> Building prep for “${esc(ev.summary || "")}”…</div>`;
   try { const { text } = await S.sample(`Write a short meeting prep note (under 150 words, plain text, no headings) for ${S.settings.sender.name} ahead of "${ev.summary || "a meeting"}" on ${ev.start && ev.start.dateTime || ""}.\nGuests: ${att.map(a => a.email).join(", ") || "none listed"}.\nEvent notes: ${String(ev.description || "").replace(/<[^>]+>/g, " ").slice(0, 800)}\nWhat we know about guests from the CRM:\n${known.map(contactBlock).join("\n\n") || "none of the guests are in the CRM"}\nSender offers:\n${offersText()}\nCover: who they are, the one thing they care about, the single question to ask, and what NOT to pitch. Never invent facts.`, { cache:{ gcTime:3600000 } });
@@ -827,19 +843,29 @@ $("#btn-export").addEventListener("click", async () => { const cols = ["first","
 const SKIP_ADDR = /(no-?reply|noreply|notification|notifications|mailer|donotreply|do-not-reply|support|billing|info@|hello@|team@|news@|updates@|alerts?@|calendar-notification|@calendly\.com|@zoom\.us|@google\.com|@docs\.google|@linkedin\.com|@facebook|@meta\.com|@apple\.com|@amazon|@stripe\.com|@paypal|@notion\.so|@slack\.com|@circle\.so|@n8n\.io|@mygentic\.io|@github\.com|@vercel\.com)/i;
 let gmFound = [];
 function guessName(email){ const local = email.split("@")[0].replace(/\+.*$/, ""); const parts = local.split(/[._-]+/).filter(p => p && !/^\d+$/.test(p)); const cap = w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); return { first: parts[0] ? cap(parts[0]) : "", last: parts.length > 1 ? cap(parts[parts.length - 1]) : "" }; }
-$("#btn-gmail").addEventListener("click", () => { if (!S.mcp){ toast("Gmail isn't reachable in this view. Use Import rows instead."); return; } gmFound = []; $("#gm-table tbody").innerHTML = ""; $("#gm-status").textContent = ""; $("#gm-count").textContent = ""; $("#gm-add").disabled = true; $("#gm-all").checked = false; $("#m-gmail").classList.add("on"); });
+$("#btn-gmail").addEventListener("click", () => { if (!S.mcp){ toast("Mail isn't reachable in this view. Use Import rows instead."); return; } gmFound = []; $("#gm-table tbody").innerHTML = ""; $("#gm-status").textContent = ""; $("#gm-count").textContent = ""; $("#gm-add").disabled = true; $("#gm-all").checked = false; $("#m-gmail").classList.add("on"); });
 $("#gm-scan").addEventListener("click", async () => {
   const range = $("#gm-range").value, me = (S.settings.sender.email || "").toLowerCase(), st = $("#gm-status"), have = new Set(S.contacts.map(c => (c.email || "").toLowerCase()).filter(Boolean));
   $("#gm-scan").disabled = true; st.innerHTML = '<span class="spin"></span> scanning…';
   const people = {}; let token = null, pages = 0;
+  const src = $("#gm-src").value;
   try {
+    if (src === "outlook"){
+      const days = { "30d":30, "90d":90, "180d":180, "1y":365 }[range] || 90; let offset = 0;
+      do {
+        const r = await S.mcp.callTool("Microsoft 365", "outlook_email_search", { folderName:"Sent Items", order:"newest", afterDateTime:`${days} days ago`, limit:25, offset }, { cache:{ staleTime:60000 } });
+        const items = blocks(r), tail = ((r.content || []).map(b => { try { return JSON.parse(b.text); } catch { return null; } }).filter(Boolean).find(j => j && j.nextOffset != null)) || null;
+        items.forEach(m => { const when = m.sentDateTime || m.receivedDateTime || ""; (m.recipients || []).forEach(raw => { const email = String(raw).match(/[\w.+-]+@[\w.-]+/); if (!email) return; const e = email[0].toLowerCase(); if (e === me || e === "dmsv.llc@gmail.com" || SKIP_ADDR.test(e)) return; const o = people[e] = people[e] || { email:e, n:0, lastAt:"", subject:"" }; o.n++; if (when > o.lastAt){ o.lastAt = when; o.subject = m.subject || ""; } }); });
+        offset = tail ? tail.nextOffset : null; pages++; st.innerHTML = `<span class="spin"></span> ${Object.keys(people).length} people so far…`;
+      } while (offset != null && pages < 6);
+    } else
     do {
       const input = { query:`in:sent newer_than:${range}`, pageSize:50 }; if (token) input.pageToken = token;
       const r = await S.mcp.callTool("Gmail", "search_threads", input, { cache:{ staleTime:60000 } }); const p = r.payload || {};
       (p.threads || []).forEach(t => (t.messages || []).forEach(m => { const when = m.date || ""; [...(m.toRecipients || []), ...(m.ccRecipients || [])].forEach(raw => { const email = String(raw).match(/[\w.+-]+@[\w.-]+/); if (!email) return; const e = email[0].toLowerCase(); if (e === me || e.endsWith("@gmail.com") && e === "dmsv.llc@gmail.com".toLowerCase() || SKIP_ADDR.test(e)) return; const o = people[e] = people[e] || { email:e, n:0, lastAt:"", subject:"" }; o.n++; if (when > o.lastAt){ o.lastAt = when; o.subject = m.subject || ""; } }); }));
       token = p.nextPageToken || null; pages++; st.innerHTML = `<span class="spin"></span> ${Object.keys(people).length} people so far…`;
     } while (token && pages < 6);
-  } catch (e){ st.textContent = gmailCopy(e); $("#gm-scan").disabled = false; return; }
+  } catch (e){ st.textContent = src === "outlook" ? outlookCopy(e) : gmailCopy(e); $("#gm-scan").disabled = false; return; }
   gmFound = Object.values(people).map(o => ({ ...o, ...guessName(o.email), known: have.has(o.email) })).sort((a,b) => b.n - a.n || (b.lastAt > a.lastAt ? 1 : -1));
   st.textContent = `${gmFound.length} people in ${pages} page${pages > 1 ? "s" : ""} of sent mail · ${gmFound.filter(x => x.known).length} already in the CRM`;
   $("#gm-table tbody").innerHTML = gmFound.length ? gmFound.map((o, i) => `<tr><td>${o.known ? '<span class="tag">in CRM</span>' : `<input type="checkbox" class="chk" data-gm="${i}">`}</td><td>${esc([o.first, o.last].filter(Boolean).join(" ") || "—")}</td><td class="note">${esc(o.email)}</td><td class="n">${o.n}</td><td class="note">${fmtDate(o.lastAt)}</td><td class="note" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.subject)}</td></tr>`).join("") : `<tr><td colspan="6"><div class="empty">No people found in that window.</div></td></tr>`;
@@ -851,8 +877,8 @@ $("#gm-all").addEventListener("change", e => { $$("[data-gm]").forEach(x => x.ch
 $("#gm-add").addEventListener("click", async () => {
   const picks = $$("[data-gm]:checked").map(x => gmFound[+x.dataset.gm]).filter(Boolean); if (!picks.length) return;
   $("#gm-add").disabled = true;
-  for (const o of picks){ const id = uid(); await store.set("contacts", id, { id, first:o.first, last:o.last, email:o.email, linkedin:"", company:"", role:"", industry:"", location:"", stage:"Warm Lead", status:"New", offer:"", angle:"", confidence:"", notes:`${o.n} email${o.n > 1 ? "s" : ""} exchanged, last ${fmtDate(o.lastAt)}${o.subject ? ` · “${o.subject}”` : ""}. Name guessed from address.`, source:"Gmail sent mail", lastContact:o.lastAt ? o.lastAt.slice(0, 10) : "", createdAt:Date.now() }); }
-  await act("you", `Added ${picks.length} warm contact${picks.length > 1 ? "s" : ""} from Gmail sent mail`);
+  for (const o of picks){ const id = uid(); await store.set("contacts", id, { id, first:o.first, last:o.last, email:o.email, linkedin:"", company:"", role:"", industry:"", location:"", stage:"Warm Lead", status:"New", offer:"", angle:"", confidence:"", notes:`${o.n} email${o.n > 1 ? "s" : ""} exchanged, last ${fmtDate(o.lastAt)}${o.subject ? ` · “${o.subject}”` : ""}. Name guessed from address.`, source:(($("#gm-src").value === "outlook") ? "Outlook sent mail" : "Gmail sent mail"), lastContact:o.lastAt ? o.lastAt.slice(0, 10) : "", createdAt:Date.now() }); }
+  await act("you", `Added ${picks.length} warm contact${picks.length > 1 ? "s" : ""} from ${$("#gm-src").value === "outlook" ? "Outlook" : "Gmail"} sent mail`);
   $("#m-gmail").classList.remove("on"); toast(`Added ${picks.length}`); go("contacts");
 });
 
@@ -915,9 +941,9 @@ function feedHTML(items){ if (!items.length) return `<div class="empty">Nothing 
 function renderActivity(){ $("#feed").innerHTML = feedHTML(S.activity); $("#feed-count").textContent = `${S.activity.length} entries`; }
 
 /* ============ SETTINGS ============ */
-$("#btn-settings").addEventListener("click", () => { const s = S.settings; $("#s-name").value = s.sender.name; $("#s-email").value = s.sender.email; $("#s-tag").value = s.sender.tagline || ""; $("#s-offers").value = s.offers || ""; $("#s-magnet").value = s.magnet || ""; $("#s-start").value = s.rampStart || todayKey(); $("#s-cap").value = s.dailyCap || 10; $("#s-batch").value = String(s.batchSize || 1); $("#s-domain").value = s.domainAuth || "unknown"; $("#s-n8n").value = s.n8nUrl || ""; $("#s-key").value = getKey(); $("#s-key-wrap").style.display = HOSTED ? "" : "none"; $("#m-settings").classList.add("on"); });
+$("#btn-settings").addEventListener("click", () => { const s = S.settings; $("#s-name").value = s.sender.name; $("#s-email").value = s.sender.email; $("#s-tag").value = s.sender.tagline || ""; $("#s-offers").value = s.offers || ""; $("#s-magnet").value = s.magnet || ""; $("#s-start").value = s.rampStart || todayKey(); $("#s-cap").value = s.dailyCap || 10; $("#s-batch").value = String(s.batchSize || 1); $("#s-domain").value = s.domainAuth || "unknown"; $("#s-mailbox").value = s.mailbox || "outlook"; $("#s-n8n").value = s.n8nUrl || ""; $("#s-key").value = getKey(); $("#s-key-wrap").style.display = HOSTED ? "" : "none"; $("#m-settings").classList.add("on"); });
 $("#s-save").addEventListener("click", async () => { const day = rampDay({ rampStart:$("#s-start").value }), maxCap = rampCap(day), want = Number($("#s-cap").value) || 10;
-  const data = { ...S.settings, sender:{ name:$("#s-name").value.trim(), email:$("#s-email").value.trim(), tagline:$("#s-tag").value.trim() }, offers:$("#s-offers").value, magnet:$("#s-magnet").value.trim(), rampStart:$("#s-start").value, dailyCap:Math.min(want, maxCap), batchSize:Number($("#s-batch").value), domainAuth:$("#s-domain").value, n8nUrl:$("#s-n8n").value.trim().replace(/\/+$/, "") };
+  const data = { ...S.settings, sender:{ name:$("#s-name").value.trim(), email:$("#s-email").value.trim(), tagline:$("#s-tag").value.trim() }, offers:$("#s-offers").value, magnet:$("#s-magnet").value.trim(), rampStart:$("#s-start").value, dailyCap:Math.min(want, maxCap), batchSize:Number($("#s-batch").value), domainAuth:$("#s-domain").value, n8nUrl:$("#s-n8n").value.trim().replace(/\/+$/, ""), mailbox:$("#s-mailbox").value };
   if (HOSTED){ try { const k = $("#s-key").value.trim(); if (k) localStorage.setItem(KEYLS, k); else localStorage.removeItem(KEYLS); } catch {} if (!S.sample && getKey()){ S.sample = apiSample(); setConn("sample", "on", "Claude · API key"); } if (S.sample && !getKey()){ S.sample = null; setConn("sample", "off", "Claude · add API key"); } }
   await store.set("settings", "main", data); $("#m-settings").classList.remove("on"); toast(want > maxCap ? `Cap held at ${maxCap} for day ${day} of the ramp` : "Settings saved"); });
 $$("[data-close]").forEach(b => b.addEventListener("click", () => b.closest(".modal").classList.remove("on")));
@@ -931,7 +957,7 @@ function renderAll(){ renderNav(); renderView(); }
 async function boot(){
   go("today");
   if (HOSTED){
-    setConn("db", "warn", "Store · this browser"); setConn("gmail", "warn", "Gmail · compose window"); setConn("cal", "off", "Calendar · not linked");
+    setConn("db", "warn", "Store · this browser"); setConn("gmail", "warn", "Gmail · compose window"); setConn("outlook", "warn", "Outlook · compose window"); setConn("cal", "off", "Calendar · not linked");
     store.db = null;
     store.subDoc("settings/main", d => { S.settings = { ...DEFAULT_SETTINGS, ...(d || {}), sender:{ ...DEFAULT_SETTINGS.sender, ...((d || {}).sender || {}) } }; renderAll(); });
     ["contacts","queue","projects","videos"].forEach(coll => store.sub(coll, rows => { S[coll] = rows.map(r => ({ ...r.data, id:r.id })); renderAll(); }));
@@ -955,7 +981,7 @@ async function boot(){
   try { S.downloads = await claude.use("downloads"); } catch { S.downloads = null; }
   // connectors
   try { S.mcp = await claude.use("mcp"); } catch { S.mcp = null; }
-  if (!S.mcp){ setConn("gmail", "off", "Gmail not reachable"); setConn("cal", "off", "Calendar not reachable"); renderAll(); return; }
+  if (!S.mcp){ setConn("gmail", "off", "Gmail not reachable"); setConn("cal", "off", "Calendar not reachable"); setConn("outlook", "off", "Outlook not reachable"); renderAll(); return; }
   S.mcp.watchTool("Google Calendar", "list_events", { pageSize:12, orderBy:"startTime" }, ev => {
     if (ev.type === "data"){ const p = ev.result.payload || {}; S.events = (p.events || []).filter(e => e.status !== "cancelled"); S.evFresh = ev.result.cache ? ev.result.cache.storedAt : Date.now(); S.mcpOk.cal = "connected"; setConn("cal", "on", "Google Calendar"); }
     else { const c = ev.error.code; S.mcpOk.cal = c === "needs_reauth" ? "Reconnect Google Calendar in Settings → Connectors" : c === "server_not_connected" ? "Add Google Calendar in Settings → Connectors" : c === "not_in_manifest" ? "Calendar not allowed for this page" : "Calendar unavailable right now"; if (["needs_reauth","server_not_connected","not_in_manifest","blocked_by_policy"].includes(c)) S.events = []; setConn("cal", "warn", S.mcpOk.cal); }
@@ -964,6 +990,16 @@ async function boot(){
   S.mcp.watchTool("Gmail", "search_threads", { query:"in:inbox newer_than:7d -category:promotions -category:social", pageSize:15 }, ev => {
     if (ev.type === "data"){ S.inbox = flattenThreads(ev.result.payload); S.inbFresh = ev.result.cache ? ev.result.cache.storedAt : Date.now(); S.mcpOk.gmail = "connected"; setConn("gmail", "on", "Gmail"); }
     else { const c = ev.error.code; S.mcpOk.gmail = c === "needs_reauth" ? "Reconnect Gmail in Settings → Connectors" : c === "server_not_connected" ? "Add Gmail in Settings → Connectors" : c === "not_in_manifest" ? "Gmail not allowed for this page" : "Gmail unavailable right now"; if (["needs_reauth","server_not_connected","not_in_manifest","blocked_by_policy"].includes(c)) S.inbox = []; setConn("gmail", "warn", S.mcpOk.gmail); }
+    if (S.view === "inbox") renderView();
+  }, { refetchInterval:300000 });
+  S.mcp.watchTool("Microsoft 365", "outlook_calendar_search", { query:"*", afterDateTime:"today", beforeDateTime:"in 14 days", order:"oldest", limit:25, offset:0 }, ev => {
+    if (ev.type === "data"){ S.oEvents = blocks(ev.result).filter(e => !e.isCancelled).map(e => ({ id:"o:" + e.id, summary:e.subject || "", start:{ dateTime:String(e.start && e.start.dateTime || "").slice(0, 19), timeZone:e.start && e.start.timeZone }, end:{ dateTime:String(e.end && e.end.dateTime || "").slice(0, 19) }, allDay:!!e.isAllDay, attendees:(e.attendees || []).map(a => ({ email:String(a), self:String(a).toLowerCase() === String(S.settings.sender.email).toLowerCase() })), organizer:{ email:e.organizer || "" }, location:e.location || "", description:e.summary || "", webLink:e.webLink || "", source:"outlook" })); S.oFresh = ev.result.cache ? ev.result.cache.storedAt : Date.now(); S.mcpOk.outlook = "connected"; setConn("outlook", "on", "Outlook"); }
+    else { const c = ev.error.code; S.mcpOk.outlook = c === "needs_reauth" ? "Reconnect Microsoft 365 in Settings → Connectors" : c === "server_not_connected" ? "Add Microsoft 365 in Settings → Connectors" : c === "not_in_manifest" ? "Outlook not allowed for this page" : "Outlook unavailable right now"; if (["needs_reauth","server_not_connected","not_in_manifest","blocked_by_policy"].includes(c)) S.oEvents = []; setConn("outlook", "warn", S.mcpOk.outlook); }
+    renderAll();
+  }, { refetchInterval:300000 });
+  S.mcp.watchTool("Microsoft 365", "outlook_email_search", { folderName:"Inbox", order:"newest", afterDateTime:"7 days ago", limit:25, offset:0 }, ev => {
+    if (ev.type === "data"){ S.oInbox = blocks(ev.result).filter(m => !/^MicrosoftExchange|postmaster@/i.test(m.sender || "")).map(m => ({ id:"o:" + m.id, subject:m.subject || "", snippet:String(m.summary || "").replace(/\s+/g, " ").slice(0, 160), sender:String(m.sender || ""), email:String(m.sender || "").toLowerCase(), date:m.receivedDateTime || "", webLink:m.webLink || "", messageId:m.id, source:"outlook" })); S.mcpOk.outlook = "connected"; setConn("outlook", "on", "Outlook"); }
+    else if (["needs_reauth","server_not_connected","not_in_manifest","blocked_by_policy"].includes(ev.error.code)) S.oInbox = [];
     if (S.view === "inbox") renderView();
   }, { refetchInterval:300000 });
   S.mcp.watchTool("Claude N8N", "search_workflows", { limit:50, sortBy:"updatedAt:desc" }, ev => {
