@@ -257,7 +257,8 @@
         <span style="flex:1"></span>
         <button class="btn sm" type="button" id="btn-analyze" title="Match an offer and angle to the selected contacts">Analyze selected</button>
         <button class="btn sm" type="button" id="btn-draft-sel">Draft selected</button>
-        <button class="btn sm" type="button" id="btn-import">Import</button>
+        <button class="btn sm" type="button" id="btn-import">Import rows</button>
+        <button class="btn sm" type="button" id="btn-gmail" title="People you have emailed, from your sent mail">From Gmail</button>
         <button class="btn sm" type="button" id="btn-export">Export for RocketFuel</button>
         <button class="btn sm primary" type="button" id="btn-add">Add contact</button>
       </div>
@@ -330,6 +331,21 @@
   <div class="field full" style="margin-top:8px"><textarea id="imp-text" style="min-height:180px;font-family:var(--mono);font-size:12px" placeholder="First Name&#9;Last Name&#9;Email&#9;Company&#9;Job Title&#10;Alan&#9;Morrison&#9;amorrison@…&#9;…"></textarea></div>
   <div class="note" id="imp-preview" style="margin-top:8px"></div></div>
   <div class="foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="imp-go">Import</button></div>
+</div></div>
+
+<div class="modal" id="m-gmail"><div class="box"><div class="ch"><h3>Add contacts from Gmail</h3><button class="btn sm" type="button" data-close>Close</button></div>
+  <div class="cb">
+    <p class="note">Scans the mail you sent and lists the people on the other end. These are your warmest pocket: real conversations, not a scrape. Names are guessed from the address, so edit them after adding.</p>
+    <div class="filters" style="margin:10px 0">
+      <label for="gm-range" class="eyebrow">Window</label><select id="gm-range"><option value="30d">Last 30 days</option><option value="90d" selected>Last 90 days</option><option value="180d">Last 6 months</option><option value="1y">Last year</option></select>
+      <button class="btn sm primary" type="button" id="gm-scan">Scan sent mail</button>
+      <span class="note" id="gm-status"></span>
+      <span style="flex:1"></span>
+      <label class="note" style="display:flex;align-items:center;gap:6px"><input type="checkbox" class="chk" id="gm-all"> select all</label>
+    </div>
+    <div class="tablewrap"><table id="gm-table"><thead><tr><th></th><th>Person</th><th>Address</th><th class="n">Emails</th><th>Last</th><th>Latest subject</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="foot"><span class="note" id="gm-count" style="margin-right:auto;align-self:center"></span><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="gm-add" disabled>Add selected as Warm Leads</button></div>
 </div></div>
 
 <div class="modal" id="m-settings"><div class="box"><div class="ch"><h3>Settings</h3><button class="btn sm" type="button" data-close>Close</button></div>
@@ -505,7 +521,7 @@ function renderToday(){
   const next = nextToDraft();
   if (used < cap && next.length) moves.push({ av:next[0], t:`Draft next: ${fullName(next[0])}`, d:`${next[0].offer || "offer not matched yet"} · ${next[0].angle || "no angle yet"}`, btn:`<button class="btn sm ${pending ? "" : "primary"}" type="button" data-draftone="${next[0].id}">Draft</button>` });
   if (used >= cap) moves.push({ t:"Daily cap reached", d:"Volume ramps only if bounces stay at zero and replies come in. Tomorrow resets.", btn:"" });
-  if (!S.contacts.length) moves.push({ t:"Import your contacts", d:"Paste rows from the Meta-dology CRM sheet or any export.", btn:`<button class="btn sm primary" type="button" data-go="contacts">Open contacts</button>` });
+  if (!S.contacts.length) moves.push({ t:"Add your contacts", d:"Pull people you have emailed from Gmail, or paste rows from the CRM sheet.", btn:`<button class="btn sm primary" type="button" data-go="contacts">Open contacts</button>` });
   $("#moves").innerHTML = moves.length ? moves.map(m => `<div class="row">${m.av ? `<div class="av ${stageClass(m.av.stage)}">${initials(m.av)}</div>` : `<div class="av cold">·</div>`}<div><div class="t">${esc(m.t)}</div><div class="d">${esc(m.d)}</div></div><div>${m.btn}</div></div>`).join("") : `<div class="empty"><b>Nothing waiting</b>Analyze a few contacts and draft the first email.</div>`;
   $("#feed-short").innerHTML = feedHTML(S.activity.slice(0, 6));
   renderAgentsShort();
@@ -796,6 +812,40 @@ $("#imp-go").addEventListener("click", async () => { const rows = parseRows($("#
 $("#btn-export").addEventListener("click", async () => { const cols = ["first","last","email","company","role","industry","location","stage","status","offer","angle","confidence","lastContact","nextFollowUp","linkedin","source","notes"]; const csv = [cols.join(","), ...S.contacts.map(c => cols.map(k => `"${String(c[k] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
   if (S.downloads){ try { await S.downloads.save({ filename:`rocketfuel-import-${todayKey()}.csv`, data:csv }); toast("CSV saved"); return; } catch (e){ if (e && e.code === "cancelled") return; } }
   try { await navigator.clipboard.writeText(csv); toast("CSV copied to clipboard"); } catch { toast("Couldn't export in this view"); } });
+
+
+/* ============ add contacts from Gmail sent mail ============ */
+const SKIP_ADDR = /(no-?reply|noreply|notification|notifications|mailer|donotreply|do-not-reply|support|billing|info@|hello@|team@|news@|updates@|alerts?@|calendar-notification|@calendly\.com|@zoom\.us|@google\.com|@docs\.google|@linkedin\.com|@facebook|@meta\.com|@apple\.com|@amazon|@stripe\.com|@paypal|@notion\.so|@slack\.com|@circle\.so|@n8n\.io|@mygentic\.io|@github\.com|@vercel\.com)/i;
+let gmFound = [];
+function guessName(email){ const local = email.split("@")[0].replace(/\+.*$/, ""); const parts = local.split(/[._-]+/).filter(p => p && !/^\d+$/.test(p)); const cap = w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); return { first: parts[0] ? cap(parts[0]) : "", last: parts.length > 1 ? cap(parts[parts.length - 1]) : "" }; }
+$("#btn-gmail").addEventListener("click", () => { if (!S.mcp){ toast("Gmail isn't reachable in this view. Use Import rows instead."); return; } gmFound = []; $("#gm-table tbody").innerHTML = ""; $("#gm-status").textContent = ""; $("#gm-count").textContent = ""; $("#gm-add").disabled = true; $("#gm-all").checked = false; $("#m-gmail").classList.add("on"); });
+$("#gm-scan").addEventListener("click", async () => {
+  const range = $("#gm-range").value, me = (S.settings.sender.email || "").toLowerCase(), st = $("#gm-status"), have = new Set(S.contacts.map(c => (c.email || "").toLowerCase()).filter(Boolean));
+  $("#gm-scan").disabled = true; st.innerHTML = '<span class="spin"></span> scanning…';
+  const people = {}; let token = null, pages = 0;
+  try {
+    do {
+      const input = { query:`in:sent newer_than:${range}`, pageSize:50 }; if (token) input.pageToken = token;
+      const r = await S.mcp.callTool("Gmail", "search_threads", input, { cache:{ staleTime:60000 } }); const p = r.payload || {};
+      (p.threads || []).forEach(t => (t.messages || []).forEach(m => { const when = m.date || ""; [...(m.toRecipients || []), ...(m.ccRecipients || [])].forEach(raw => { const email = String(raw).match(/[\w.+-]+@[\w.-]+/); if (!email) return; const e = email[0].toLowerCase(); if (e === me || e.endsWith("@gmail.com") && e === "dmsv.llc@gmail.com".toLowerCase() || SKIP_ADDR.test(e)) return; const o = people[e] = people[e] || { email:e, n:0, lastAt:"", subject:"" }; o.n++; if (when > o.lastAt){ o.lastAt = when; o.subject = m.subject || ""; } }); }));
+      token = p.nextPageToken || null; pages++; st.innerHTML = `<span class="spin"></span> ${Object.keys(people).length} people so far…`;
+    } while (token && pages < 6);
+  } catch (e){ st.textContent = gmailCopy(e); $("#gm-scan").disabled = false; return; }
+  gmFound = Object.values(people).map(o => ({ ...o, ...guessName(o.email), known: have.has(o.email) })).sort((a,b) => b.n - a.n || (b.lastAt > a.lastAt ? 1 : -1));
+  st.textContent = `${gmFound.length} people in ${pages} page${pages > 1 ? "s" : ""} of sent mail · ${gmFound.filter(x => x.known).length} already in the CRM`;
+  $("#gm-table tbody").innerHTML = gmFound.length ? gmFound.map((o, i) => `<tr><td>${o.known ? '<span class="tag">in CRM</span>' : `<input type="checkbox" class="chk" data-gm="${i}">`}</td><td>${esc([o.first, o.last].filter(Boolean).join(" ") || "—")}</td><td class="note">${esc(o.email)}</td><td class="n">${o.n}</td><td class="note">${fmtDate(o.lastAt)}</td><td class="note" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.subject)}</td></tr>`).join("") : `<tr><td colspan="6"><div class="empty">No people found in that window.</div></td></tr>`;
+  $("#gm-scan").disabled = false; gmCount();
+});
+function gmCount(){ const n = $$("[data-gm]:checked").length; $("#gm-count").textContent = n ? `${n} selected` : ""; $("#gm-add").disabled = !n; }
+$("#gm-table").addEventListener("change", gmCount);
+$("#gm-all").addEventListener("change", e => { $$("[data-gm]").forEach(x => x.checked = e.target.checked); gmCount(); });
+$("#gm-add").addEventListener("click", async () => {
+  const picks = $$("[data-gm]:checked").map(x => gmFound[+x.dataset.gm]).filter(Boolean); if (!picks.length) return;
+  $("#gm-add").disabled = true;
+  for (const o of picks){ const id = uid(); await store.set("contacts", id, { id, first:o.first, last:o.last, email:o.email, linkedin:"", company:"", role:"", industry:"", location:"", stage:"Warm Lead", status:"New", offer:"", angle:"", confidence:"", notes:`${o.n} email${o.n > 1 ? "s" : ""} exchanged, last ${fmtDate(o.lastAt)}${o.subject ? ` · “${o.subject}”` : ""}. Name guessed from address.`, source:"Gmail sent mail", lastContact:o.lastAt ? o.lastAt.slice(0, 10) : "", createdAt:Date.now() }); }
+  await act("you", `Added ${picks.length} warm contact${picks.length > 1 ? "s" : ""} from Gmail sent mail`);
+  $("#m-gmail").classList.remove("on"); toast(`Added ${picks.length}`); go("contacts");
+});
 
 /* ============ PROJECTS ============ */
 function renderProjects(){ const cols = ["Planned","Active","Blocked","Done"]; $("#kan").innerHTML = cols.map(st => { const ps = S.projects.filter(p => p.status === st).sort((a,b) => (a.due || "9").localeCompare(b.due || "9")); return `<div class="col"><h4>${st}<span class="num">${ps.length}</span></h4>${ps.map(p => `<div class="card pc" data-proj="${p.id}"><div class="t">${esc(p.name)}</div><div class="d">${esc(p.client || "")}${p.due ? " · due " + fmtDate(p.due) : ""}${p.owner ? " · " + esc(p.owner) : ""}</div>${p.next ? `<div class="n">→ ${esc(p.next)}</div>` : ""}</div>`).join("") || `<div class="note" style="padding:6px 2px">—</div>`}</div>`; }).join(""); }
