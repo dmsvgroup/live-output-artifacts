@@ -1,0 +1,293 @@
+<!-- Digital DNA Scorecard - a LIVE Cowork artifact that proves a MyGentic brain changes the output.
+     Claude: replace __BRAIN_TOOL__ (TWO places: the `const TOOL` line below AND the mcp_tools
+     array you pass to create_artifact) with the EXACT loaded brain tool name as it appears in
+     this session - mcp__<serverId>__brain_<slug>, where <serverId> is an opaque UUID in Cowork.
+     Do NOT use a friendly connector name - it does not resolve in the artifact sandbox.
+     Copy the rest as-is; do NOT paste instructions into the page. -->
+<style>
+  *{box-sizing:border-box}
+  html,body{ margin:0; background:#080b13; }
+  :root{
+    --bd:rgba(150,130,255,.14); --bd-h:rgba(165,135,255,.6);
+    --txt:#eef0f8; --muted:#9aa0b8; --faint:#6b7088;
+    --acc1:#7c5cff; --acc2:#d24bef; --good:#36e0a0; --warn:#ffce57; --bad:#ff7a7a;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+  }
+  #dna{ font:14px/1.55 var(--sans); color:var(--txt); min-height:100vh; padding:24px 22px 60px;
+    background:
+      radial-gradient(1100px 520px at 12% -12%, rgba(124,92,255,.18), transparent 58%),
+      radial-gradient(900px 440px at 102% -4%, rgba(210,75,239,.12), transparent 55%),
+      #080b13; }
+  .wrap{ max-width:1120px; margin:0 auto; }
+  .head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
+  .head h1{ margin:0; font-size:26px; font-weight:780; letter-spacing:-.02em;
+    background:linear-gradient(90deg,#fff,#c9c4ff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .head .sub{ margin:6px 0 0; color:var(--muted); font-size:13px; max-width:640px; }
+  .live{ display:inline-flex; align-items:center; gap:8px; padding:7px 13px; border-radius:999px;
+    font:600 11px/1 var(--mono); letter-spacing:.07em; text-transform:uppercase; color:#cdbcff;
+    background:rgba(124,92,255,.1); border:1px solid rgba(124,92,255,.3); white-space:nowrap; }
+  .live::before{ content:""; width:7px; height:7px; border-radius:50%; background:var(--good); box-shadow:0 0 10px var(--good); animation:pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .card{ background:rgba(255,255,255,.035); border:1px solid var(--bd); border-radius:16px; padding:18px; }
+  .card h2{ margin:0 0 10px; font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-family:var(--mono); }
+  textarea{ width:100%; resize:vertical; min-height:74px; padding:12px 14px; border-radius:12px; color:var(--txt);
+    background:rgba(255,255,255,.04); border:1px solid var(--bd); font:14px/1.5 var(--sans); outline:none; }
+  textarea:focus{ border-color:var(--bd-h); box-shadow:0 0 0 4px rgba(124,92,255,.14) }
+  .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px; }
+  .btn{ border:0; cursor:pointer; padding:11px 18px; border-radius:12px; font:600 13.5px var(--sans); color:#fff;
+    background:linear-gradient(135deg,var(--acc1),var(--acc2)); box-shadow:0 4px 16px rgba(124,92,255,.35); transition:filter .14s, transform .12s; }
+  .btn:hover{ filter:brightness(1.1) } .btn:active{ transform:scale(.97) }
+  .btn:disabled{ opacity:.4; cursor:not-allowed; filter:none }
+  .btn.ghost{ background:rgba(255,255,255,.06); border:1px solid var(--bd); box-shadow:none; color:var(--txt); }
+  .hint{ color:var(--faint); font-size:12.5px; }
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+  @media (max-width:760px){ .grid{ grid-template-columns:1fr } }
+  .col{ display:flex; flex-direction:column; gap:12px; }
+  .col .tag{ font:600 11px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+  .col.without .tag{ color:var(--faint) } .col.with .tag{ color:#cdbcff }
+  .ring{ display:flex; align-items:center; gap:14px; }
+  .ring svg{ width:84px; height:84px; flex:0 0 auto; transform:rotate(-90deg) }
+  .ring .n{ font:780 30px/1 var(--sans); letter-spacing:-.02em }
+  .ring .l{ color:var(--muted); font-size:12.5px; margin-top:4px }
+  .out{ white-space:pre-wrap; overflow-wrap:anywhere; font-size:13.5px; line-height:1.6; color:#d9dcec; min-height:120px; max-height:380px; overflow:auto;
+    background:rgba(0,0,0,.25); border:1px solid var(--bd); border-radius:12px; padding:14px; }
+  .out.empty{ color:var(--faint); font-style:italic }
+  .bars{ display:grid; gap:9px; margin-top:14px; }
+  .bar{ display:grid; grid-template-columns:150px 1fr 1fr 44px; gap:10px; align-items:center; font-size:12.5px; }
+  @media (max-width:760px){ .bar{ grid-template-columns:110px 1fr 1fr 40px } }
+  .bar .nm{ color:var(--muted) }
+  .bar .tr{ display:block; height:9px; border-radius:99px; background:rgba(255,255,255,.06); overflow:hidden }
+  .bar .fl{ display:block; height:100%; border-radius:99px; transition:width .5s ease }
+  .bar .without .fl{ background:rgba(255,255,255,.28) }
+  .bar .with .fl{ background:linear-gradient(90deg,var(--acc1),var(--acc2)) }
+  .bar .d{ font:600 12px var(--mono); text-align:right }
+  .bar .d.up{ color:var(--good) } .bar .d.down{ color:var(--bad) } .bar .d.same{ color:var(--faint) }
+  .legend{ display:flex; gap:16px; font-size:12px; color:var(--muted); margin-top:8px; }
+  .legend i{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px }
+  .verdict{ margin-top:14px; padding:12px 14px; border-radius:12px; font-size:13.5px; background:rgba(54,224,160,.08); border:1px solid rgba(54,224,160,.3); }
+  .verdict.flat{ background:rgba(255,206,87,.08); border-color:rgba(255,206,87,.3) }
+  .err{ color:var(--bad); font-size:12.5px; }
+  .status{ font:600 11.5px var(--mono); color:var(--muted); letter-spacing:.05em; }
+  .spin{ display:inline-block; width:10px; height:10px; border-radius:50%; border:2px solid rgba(255,255,255,.2); border-top-color:#cdbcff; animation:spin .8s linear infinite; vertical-align:-1px; margin-right:6px }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  table.hist{ width:100%; border-collapse:collapse; font-size:12.5px; margin-top:6px }
+  table.hist th{ text-align:left; color:var(--faint); font:600 11px var(--mono); letter-spacing:.08em; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid var(--bd) }
+  table.hist td{ padding:8px; border-bottom:1px solid rgba(255,255,255,.05); vertical-align:top }
+  table.hist td.p{ color:var(--muted); max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .pill{ display:inline-block; padding:2px 8px; border-radius:99px; font:600 11px var(--mono) }
+  .pill.with{ background:rgba(124,92,255,.18); color:#cdbcff } .pill.without{ background:rgba(255,255,255,.08); color:var(--muted) }
+  .paste{ display:none; margin-top:10px }
+  .paste.show{ display:block }
+</style>
+
+<div id="dna"><div class="wrap">
+  <div class="head">
+    <div>
+      <h1>Digital DNA Scorecard</h1>
+      <p class="sub">Same prompt, twice: once through your MyGentic brain, once without it. A blind judge scores both on voice, audience, offers, AI-isms and actionability.</p>
+    </div>
+    <span class="live" id="brain-pill">Brain connected</span>
+  </div>
+
+  <div class="card">
+    <h2>Test prompt</h2>
+    <textarea id="prompt">Write a short introduction email to a prospective client. Introduce me, who I help, and what I offer, and end with one clear next step.</textarea>
+    <div class="row">
+      <button class="btn" id="run">Run comparison</button>
+      <button class="btn ghost" id="clear">Clear</button>
+      <span class="status" id="status"></span>
+    </div>
+    <div class="paste" id="paste">
+      <p class="hint">Claude is not available inside this page for the baseline. Paste the same prompt into a chat <b>without</b> the brain connected and drop the answer here, then run again.</p>
+      <textarea id="baseline" placeholder="Paste the without-brain output here…"></textarea>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card col without">
+      <span class="tag">Without brain</span>
+      <div class="ring">
+        <svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="3.2"/><circle id="ring-a" cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="3.2" stroke-linecap="round" stroke-dasharray="0 100"/></svg>
+        <div><div class="n" id="score-a">—</div><div class="l">generic model output</div></div>
+      </div>
+      <div class="out empty" id="out-a">Run the comparison to generate the baseline.</div>
+    </div>
+    <div class="card col with">
+      <span class="tag">With brain</span>
+      <div class="ring">
+        <svg viewBox="0 0 36 36"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#d24bef"/></linearGradient></defs><circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="3.2"/><circle id="ring-b" cx="18" cy="18" r="15.9" fill="none" stroke="url(#g)" stroke-width="3.2" stroke-linecap="round" stroke-dasharray="0 100"/></svg>
+        <div><div class="n" id="score-b">—</div><div class="l">your Digital DNA</div></div>
+      </div>
+      <div class="out empty" id="out-b">Run the comparison to call your brain.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Rubric <span id="judge-mode" style="text-transform:none;letter-spacing:0;color:var(--faint)"></span></h2>
+    <div class="bars" id="bars"></div>
+    <div class="legend"><span><i style="background:rgba(255,255,255,.28)"></i>Without brain</span><span><i style="background:linear-gradient(90deg,#7c5cff,#d24bef)"></i>With brain</span></div>
+    <div id="verdict"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Run history <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(this device only)</span></h2>
+    <div id="hist"></div>
+  </div>
+</div></div>
+
+<script>
+  // Claude replaces __BRAIN_TOOL__ with the EXACT loaded brain tool name
+  // (mcp__<serverId>__brain_<slug>; UUID serverId in Cowork - read it live).
+  const TOOL = "__BRAIN_TOOL__";
+  const DIMS = [
+    ["voice",    "Voice match",          "Reads like the author's own tone rules, not a generic assistant."],
+    ["audience", "Audience specificity", "Names the real audience and what they actually care about."],
+    ["offers",   "Offer accuracy",       "References the author's real offers and positioning; invents nothing."],
+    ["aiisms",   "No AI-isms",           "No filler, hedging, 'I hope this finds you well', 'in today's fast-paced world'."],
+    ["action",   "Actionability",        "Ends with one clear, specific next step the reader can take."],
+  ];
+  const HKEY = "dna-scorecard:history";
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
+  const hasAI = () => !!(window.cowork && typeof window.cowork.askClaude === "function");
+
+  function unwrapText(r){
+    if (r && r.isError) throw new Error("the brain returned an error");
+    const sc = r && r.structuredContent;
+    let t = "";
+    if (sc && typeof sc === "object") t = sc.reply || sc.response || sc.message || sc.text || sc.output || JSON.stringify(sc);
+    else t = (r && r.content && r.content[0] && r.content[0].text) || "";
+    // strip the trailing [SESSION: …] scaffolding the brain appends
+    return String(t).replace(/\[SESSION:[^\]]*\][\s\S]*$/i, "").replace(/ORCHESTRATOR_SESSION[\s:="'].*$/gim, "").trim();
+  }
+  function parseJSON(x){
+    if (x && typeof x === "object") return x;
+    const s = String(x ?? "");
+    const m = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const cands = [m ? m[1] : null, s, s.slice(s.indexOf("{"), s.lastIndexOf("}") + 1)].filter(Boolean);
+    for (const c of cands){ try { return JSON.parse(c); } catch {} }
+    return null;
+  }
+
+  // Deterministic fallback judge - only used when askClaude is unavailable. Labelled in the UI.
+  function heuristic(text, prompt){
+    const t = String(text || ""); const low = t.toLowerCase();
+    const words = t.split(/\s+/).filter(Boolean).length || 1;
+    const cliches = ["i hope this finds you well","in today's fast-paced","cutting-edge","leverage","synergy","unlock","game-changer","seamless","robust","i wanted to reach out","excited to","revolutionize","empower","delve","tailored solutions","take your .* to the next level","don't hesitate","look forward to hearing"];
+    const hits = cliches.reduce((n,c) => n + (new RegExp(c,"i").test(low) ? 1 : 0), 0);
+    const proper = (t.match(/\b[A-Z][a-z]{2,}(?:\s[A-Z][a-z]{2,})?\b/g) || []).length;
+    const nums = (t.match(/\b\d[\d,.%]*\b/g) || []).length;
+    const short = t.split(/[.!?]\s/).filter(s => s.split(/\s+/).length <= 18).length;
+    const sentences = t.split(/[.!?]\s/).length || 1;
+    const askish = /\b(reply|book|schedule|call|meet|let me know|pick a time|are you open|would .{0,20} work|worth a)\b/i.test(t) ? 1 : 0;
+    const clamp = v => Math.max(0, Math.min(20, Math.round(v)));
+    return {
+      voice:    clamp(8 + 10 * (short / sentences) - 2 * hits),
+      audience: clamp(6 + Math.min(10, proper * 1.5)),
+      offers:   clamp(5 + Math.min(10, proper) + Math.min(5, nums * 2)),
+      aiisms:   clamp(20 - hits * 4),
+      action:   clamp(6 + askish * 10 + (/\?\s*$/.test(t.trim()) ? 4 : 0)),
+    };
+  }
+
+  async function judge(withoutText, withText){
+    if (!hasAI()) return { mode:"heuristic", a: heuristic(withoutText), b: heuristic(withText) };
+    // Blind: shuffle so the judge doesn't know which one used the brain.
+    const flip = Math.random() < 0.5;
+    const X = flip ? withText : withoutText, Y = flip ? withoutText : withText;
+    const rubric = DIMS.map(d => `- ${d[0]}: ${d[1]} — ${d[2]} (0-20)`).join("\n");
+    const prompt = `You are a strict editor judging two candidate responses to the same request. Score each response on five dimensions, 0-20 each. Judge only what is on the page; do not reward length. Reply with ONLY JSON: {"X":{"voice":n,"audience":n,"offers":n,"aiisms":n,"action":n,"note":"one sentence"},"Y":{...}}\n\nDIMENSIONS\n${rubric}\n\nREQUEST\n${$("prompt").value.trim()}\n\nRESPONSE X\n${X}\n\nRESPONSE Y\n${Y}`;
+    const raw = await window.cowork.askClaude(prompt, []);
+    const j = parseJSON(raw);
+    if (!j || !j.X || !j.Y) throw new Error("judge returned no scores");
+    const a = flip ? j.Y : j.X, b = flip ? j.X : j.Y;
+    return { mode:"blind ai judge", a, b };
+  }
+
+  const total = s => DIMS.reduce((n,d) => n + (Number(s[d[0]]) || 0), 0);
+  function setRing(id, nId, pct){
+    $(id).setAttribute("stroke-dasharray", `${Math.max(0,Math.min(100,pct))} 100`);
+    $(nId).textContent = pct + "%";
+  }
+  function renderScores(res){
+    const A = total(res.a), B = total(res.b);
+    setRing("ring-a","score-a",A); setRing("ring-b","score-b",B);
+    $("judge-mode").textContent = "· " + res.mode;
+    $("bars").innerHTML = DIMS.map(d => {
+      const x = Number(res.a[d[0]]) || 0, y = Number(res.b[d[0]]) || 0, diff = y - x;
+      return `<div class="bar"><span class="nm" title="${esc(d[2])}">${esc(d[1])}</span>
+        <span class="tr without"><span class="fl" style="width:${x*5}%"></span></span>
+        <span class="tr with"><span class="fl" style="width:${y*5}%"></span></span>
+        <span class="d ${diff>0?"up":diff<0?"down":"same"}">${diff>0?"+":""}${diff}</span></div>`;
+    }).join("");
+    const v = $("verdict");
+    if (B > A) v.innerHTML = `<div class="verdict"><b>+${B-A} points with the brain.</b> ${esc(res.b.note || "The brain version is more specific to you, your audience and your offers.")}</div>`;
+    else v.innerHTML = `<div class="verdict flat"><b>No lift yet (${B}% vs ${A}%).</b> ${esc(res.b.note || "")} Rerun the DNA scan in deep mode and check that skills were pasted, not uploaded.</div>`;
+    return { A, B };
+  }
+
+  let memHist = null; // in-memory fallback when localStorage is unavailable (private window, sandbox)
+  function loadHist(){ if (memHist) return memHist; try { return JSON.parse(localStorage.getItem(HKEY) || "[]"); } catch { return []; } }
+  function saveHist(h){ memHist = h.slice(0, 25); try { localStorage.setItem(HKEY, JSON.stringify(memHist)); } catch {} }
+  function renderHist(){
+    const h = loadHist();
+    if (!h.length){ $("hist").innerHTML = '<p class="hint">No runs yet.</p>'; return; }
+    $("hist").innerHTML = '<table class="hist"><thead><tr><th>When</th><th>Prompt</th><th>Without</th><th>With</th><th>Lift</th><th>Judge</th></tr></thead><tbody>' +
+      h.map(r => `<tr><td>${esc(new Date(r.t).toLocaleString())}</td><td class="p" title="${esc(r.p)}">${esc(r.p)}</td>
+        <td><span class="pill without">${r.a}%</span></td><td><span class="pill with">${r.b}%</span></td>
+        <td style="color:${r.b-r.a>0?"var(--good)":"var(--bad)"}">${r.b-r.a>0?"+":""}${r.b-r.a}</td><td class="hint">${esc(r.m)}</td></tr>`).join("") + "</tbody></table>";
+  }
+
+  let busy = false;
+  async function run(){
+    if (busy) return;
+    const prompt = $("prompt").value.trim();
+    if (!prompt) return;
+    busy = true; $("run").disabled = true;
+    const status = $("status");
+    const outA = $("out-a"), outB = $("out-b");
+    try {
+      // 1) with brain
+      status.innerHTML = '<span class="spin"></span>calling your brain…';
+      outB.classList.remove("empty"); outB.textContent = "";
+      const withText = unwrapText(await window.cowork.callMcpTool(TOOL, { user_input: prompt }));
+      outB.textContent = withText || "(empty reply)";
+
+      // 2) without brain
+      let withoutText = "";
+      if (hasAI()){
+        status.innerHTML = '<span class="spin"></span>generating the baseline without the brain…';
+        withoutText = String(await window.cowork.askClaude(prompt + "\n\n(Answer directly. You have no information about the author beyond this request.)", []) || "");
+        $("paste").classList.remove("show");
+      } else {
+        withoutText = $("baseline").value.trim();
+        $("paste").classList.add("show");
+        if (!withoutText){ status.textContent = "paste a baseline to score both"; outA.classList.add("empty"); outA.textContent = "Waiting for a pasted baseline."; return; }
+      }
+      outA.classList.remove("empty"); outA.textContent = withoutText;
+
+      // 3) judge
+      status.innerHTML = '<span class="spin"></span>scoring…';
+      const res = await judge(withoutText, withText);
+      const { A, B } = renderScores(res);
+      const h = loadHist(); h.unshift({ t: Date.now(), p: prompt, a: A, b: B, m: res.mode }); saveHist(h); renderHist();
+      status.textContent = "done";
+    } catch (e) {
+      status.innerHTML = '<span class="err">' + esc(e.message) + '</span>';
+      if (/error|not found|denied|unauthor/i.test(e.message)) $("brain-pill").textContent = "Brain not reachable — authenticate the connector";
+    } finally {
+      busy = false; $("run").disabled = false;
+    }
+  }
+
+  $("run").addEventListener("click", run);
+  $("clear").addEventListener("click", () => {
+    ["out-a","out-b"].forEach(id => { $(id).classList.add("empty"); $(id).textContent = "Cleared."; });
+    ["score-a","score-b"].forEach(id => $(id).textContent = "—");
+    setRing("ring-a","score-a",0); setRing("ring-b","score-b",0); $("score-a").textContent = "—"; $("score-b").textContent = "—";
+    $("bars").innerHTML = ""; $("verdict").innerHTML = ""; $("judge-mode").textContent = ""; $("status").textContent = "";
+  });
+  if (!hasAI()) $("paste").classList.add("show");
+  renderHist();
+</script>
