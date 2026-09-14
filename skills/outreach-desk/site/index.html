@@ -237,7 +237,7 @@
           <div class="card"><div class="ch"><h3>Agent activity</h3><button class="btn sm" type="button" data-go="activity">All activity</button></div><div class="cb feed" id="feed-short"></div></div>
         </div>
         <div class="grid" style="gap:14px">
-          <div class="card"><div class="ch"><h3>Agents running</h3><button class="btn sm" type="button" data-go="agents">All agents</button></div><div class="cb" id="ag-short"></div></div>
+          <div class="card"><div class="ch"><h3>Agents running</h3><span style="display:flex;gap:6px"><span id="ag-short-open"></span><button class="btn sm" type="button" data-go="agents">All agents</button></span></div><div class="cb" id="ag-short"></div></div>
           <div class="card"><div class="ch"><h3>Upcoming meetings</h3><span class="note" id="cal-fresh"></span></div><div class="cb" id="cal-short"></div></div>
           <div class="card"><div class="ch"><h3>Guardrails</h3></div><div class="cb lint" id="guard"></div></div>
         </div>
@@ -306,8 +306,8 @@
     <section class="view" id="v-agents">
       <div class="grid g4" id="ag-tiles" style="margin-bottom:12px"></div>
       <div class="grid g-main">
-        <div class="card"><div class="ch"><h3>Agents · n8n workflows</h3><span class="note" id="ag-fresh"></span></div><div class="cb tablewrap" style="padding:0"><table id="ag-table"><thead><tr><th>Agent</th><th>State</th><th>Last run</th><th>24h</th><th class="n">Runs</th></tr></thead><tbody></tbody></table></div></div>
-        <div class="card"><div class="ch"><h3>Recent runs</h3><span class="note" id="ag-runs-count"></span></div><div class="cb list" id="ag-runs"></div></div>
+        <div class="card"><div class="ch"><h3>Agents · n8n workflows</h3><span style="display:flex;gap:8px;align-items:center"><span class="note" id="ag-fresh"></span><span id="ag-open"></span></span></div><div class="cb tablewrap" style="padding:0"><table id="ag-table"><thead><tr><th>Agent</th><th>State</th><th>Last run</th><th>24h</th><th class="n">Runs</th><th></th></tr></thead><tbody></tbody></table></div></div>
+        <div class="card"><div class="ch"><h3>Recent runs</h3><span style="display:flex;gap:8px;align-items:center"><span class="note" id="ag-runs-count"></span><span id="ag-open-runs"></span></span></div><div class="cb list" id="ag-runs"></div></div>
       </div>
     </section>
 
@@ -351,6 +351,7 @@
     <div class="field"><label for="s-cap">Daily cap (never above the ramp table)</label><input id="s-cap" type="number" min="1" max="80"></div>
     <div class="field"><label for="s-batch">Approval batch size</label><select id="s-batch"><option value="1">1 at a time</option><option value="5">5 at a time</option><option value="10">10 at a time</option></select></div>
     <div class="field"><label for="s-domain">Custom domain authenticated (SPF, DKIM, DMARC)?</label><select id="s-domain"><option value="unknown">Not sure yet</option><option value="yes">Yes, verified</option><option value="no">No / free Gmail</option></select></div>
+    <div class="field full"><label for="s-n8n">n8n workspace address (for Open in n8n links)</label><input id="s-n8n" placeholder="https://your-workspace.app.n8n.cloud"></div>
     <div class="field full" id="s-key-wrap"><label for="s-key">Anthropic API key — web version only. Stays in this browser (local storage), never in the shared store.</label><input id="s-key" type="password" placeholder="sk-ant-…" autocomplete="off"></div>
   </div>
   <div class="foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="s-save">Save settings</button></div>
@@ -399,7 +400,7 @@ const CLICHES = ["i hope this email finds you well","i hope this finds you well"
 const FOLLOWUP_STEPS = ["ANSWER QUESTION","SEND LEAD MAGNET","SEND CALENDAR","ACKNOWLEDGE NO","CONTINUE CONVERSATION","NO FOLLOW-UP NEEDED"];
 const DEFAULT_SETTINGS = { sender:{ name:"Drake Shields", email:"drake@meta-dology.com", tagline:"Preconstruction clarity, stakeholder alignment, and risk reduction through immersive digital twins." },
   offers:"Meta-dology — developers, EPCs, owners who need to see the project before it is built — visual planning and digital-twin clarity that aligns stakeholders and cuts rework\nDMSV Group — estimating, project controls and operations leaders — AI readiness, estimating intelligence and workflow automation that helps teams run it smarter",
-  magnet:"", rampStart:"", dailyCap:10, batchSize:1, cleanStreak:0, totalClean:0, domainAuth:"unknown" };
+  magnet:"", rampStart:"", dailyCap:10, batchSize:1, cleanStreak:0, totalClean:0, domainAuth:"unknown", n8nUrl:"https://dmsvgroup.app.n8n.cloud" };
 
 /* ============ helpers ============ */
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -827,15 +828,17 @@ $("#vd-delete").addEventListener("click", async () => { if (editingV && confirm(
 
 /* ============ AGENTS (n8n workflows = Rockstar agents) ============ */
 const dur = (a, b) => { const ms = new Date(b) - new Date(a); if (!(ms >= 0)) return ""; return ms < 1000 ? ms + " ms" : ms < 60000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms / 60000) + " min"; };
+const n8n = () => (S.settings.n8nUrl || "").replace(/\/+$/, "");
+const n8nLink = (path, label, cls) => n8n() ? `<a class="btn sm ${cls || ""}" href="${esc(n8n() + path)}" target="_blank" rel="noopener">${label}</a>` : "";
 const runTag = st => ({ success:"good", error:"crit", crashed:"crit", running:"info", waiting:"amber", new:"amber", canceled:"" })[st] || "";
 function agentStats(){
   const byWf = {}; const cutoff = Date.now() - 86400000;
   S.runs.forEach(r => { const o = byWf[r.workflowId] = byWf[r.workflowId] || { last:null, ok:0, err:0, n:0, running:0 }; o.n++; if (!o.last || r.startedAt > o.last.startedAt) o.last = r; if (new Date(r.startedAt) > cutoff){ if (r.status === "success") o.ok++; else if (["error","crashed"].includes(r.status)) o.err++; } if (["running","new","waiting"].includes(r.status)) o.running++; });
   return byWf;
 }
-function agentsUnavailable(short){ return `<div class="empty">${HOSTED ? (short ? "Agents aren't linked on the web version." : "<b>Agents aren't linked on the web version</b>The claude.ai copy of this page watches your n8n workflows live.") : (S.agState === "unknown" ? "Loading agents…" : esc(S.agState))}</div>`; }
+function agentsUnavailable(short){ return `<div class="empty">${HOSTED ? (short ? "Agents aren't linked on the web version. " : "<b>Agents aren't linked on the web version</b>The claude.ai copy of this page watches your n8n workflows live. ") : (S.agState === "unknown" ? "Loading agents…" : esc(S.agState) + " ")}${n8nLink("/home/workflows", "Open n8n")}</div>`; }
 function renderAgentsShort(){
-  const el = $("#ag-short"); if (!el) return;
+  const el = $("#ag-short"); if (!el) return; const op = $("#ag-short-open"); if (op) op.innerHTML = n8nLink("/home/workflows", "Open n8n");
   if (!S.mcp || !S.workflows.length){ el.innerHTML = agentsUnavailable(true); return; }
   const st = agentStats(), running = S.runs.filter(r => ["running","new","waiting"].includes(r.status)), errs = S.runs.filter(r => ["error","crashed"].includes(r.status)).slice(0, 2);
   const wfName = id => (S.workflows.find(w => w.id === id) || {}).name || id;
@@ -844,16 +847,17 @@ function renderAgentsShort(){
 }
 function renderAgents(){
   $("#ag-fresh").textContent = S.agFresh ? "updated " + ago(S.agFresh) : "";
-  if (!S.mcp){ $("#ag-tiles").innerHTML = ""; $("#ag-table tbody").innerHTML = `<tr><td colspan="5">${agentsUnavailable(false)}</td></tr>`; $("#ag-runs").innerHTML = ""; $("#ag-runs-count").textContent = ""; return; }
+  $("#ag-open").innerHTML = n8nLink("/home/workflows", "Open n8n", "primary"); $("#ag-open-runs").innerHTML = n8nLink("/home/executions", "All executions");
+  if (!S.mcp){ $("#ag-tiles").innerHTML = ""; $("#ag-table tbody").innerHTML = `<tr><td colspan="6">${agentsUnavailable(false)}</td></tr>`; $("#ag-runs").innerHTML = ""; $("#ag-runs-count").textContent = ""; return; }
   const st = agentStats(), running = S.runs.filter(r => ["running","new","waiting"].includes(r.status)).length, err24 = S.runs.filter(r => ["error","crashed"].includes(r.status) && new Date(r.startedAt) > Date.now() - 86400000).length, ok24 = S.runs.filter(r => r.status === "success" && new Date(r.startedAt) > Date.now() - 86400000).length;
   $("#ag-tiles").innerHTML = [["Agents active", `${S.workflows.filter(w => w.active).length} <small>of ${S.workflows.length}</small>`, "n8n workflows switched on"],["Running now", running, "executions in progress"],["Succeeded · 24h", ok24, "completed runs"],["Failed · 24h", err24, err24 ? "open the run in n8n to see the node that failed" : "no failures"]]
     .map(([l,v,d]) => `<div class="card tile"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${d}</div></div>`).join("");
   const rows = [...S.workflows].sort((a,b) => (b.active - a.active) || ((st[b.id] || {}).n || 0) - ((st[a.id] || {}).n || 0) || a.name.localeCompare(b.name));
   $("#ag-table tbody").innerHTML = rows.length ? rows.map(w => { const o = st[w.id] || { last:null, ok:0, err:0, n:0, running:0 };
-    return `<tr><td><b>${esc(w.name)}</b>${w.description ? `<div class="note">${esc(w.description)}</div>` : ""}</td><td>${o.running ? '<span class="tag info">running</span>' : w.active ? '<span class="tag good">active</span>' : '<span class="tag">off</span>'}</td><td>${o.last ? `<span class="tag ${runTag(o.last.status)}">${o.last.status}</span> <span class="note">${fmtDate(o.last.startedAt)} ${fmtTime(o.last.startedAt)}</span>` : '<span class="note">no recent runs</span>'}</td><td class="note">${o.ok || o.err ? `${o.ok} ok${o.err ? ` · <span style="color:var(--crit)">${o.err} failed</span>` : ""}` : "—"}</td><td class="n">${o.n}</td></tr>`; }).join("") : `<tr><td colspan="5">${agentsUnavailable(false)}</td></tr>`;
+    return `<tr><td><b>${esc(w.name)}</b>${w.description ? `<div class="note">${esc(w.description)}</div>` : ""}</td><td>${o.running ? '<span class="tag info">running</span>' : w.active ? '<span class="tag good">active</span>' : '<span class="tag">off</span>'}</td><td>${o.last ? `<span class="tag ${runTag(o.last.status)}">${o.last.status}</span> <span class="note">${fmtDate(o.last.startedAt)} ${fmtTime(o.last.startedAt)}</span>` : '<span class="note">no recent runs</span>'}</td><td class="note">${o.ok || o.err ? `${o.ok} ok${o.err ? ` · <span style="color:var(--crit)">${o.err} failed</span>` : ""}` : "—"}</td><td class="n">${o.n}</td><td>${n8nLink("/workflow/" + encodeURIComponent(w.id), "Open")}</td></tr>`; }).join("") : `<tr><td colspan="6">${agentsUnavailable(false)}</td></tr>`;
   const wfName = id => (S.workflows.find(w => w.id === id) || {}).name || id;
   $("#ag-runs-count").textContent = `${S.runs.length} most recent`;
-  $("#ag-runs").innerHTML = S.runs.length ? S.runs.slice(0, 30).map(r => `<div class="row"><div class="av ${r.status === "success" ? "past" : ["error","crashed"].includes(r.status) ? "cold" : "warm"}" style="${["error","crashed"].includes(r.status) ? "color:var(--crit)" : ""}">${r.status === "success" ? "✓" : ["error","crashed"].includes(r.status) ? "!" : "…"}</div><div><div class="t">${esc(wfName(r.workflowId))}</div><div class="d">${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)} · ${r.mode} · ${r.stoppedAt ? dur(r.startedAt, r.stoppedAt) : "in progress"}</div></div><div><span class="tag ${runTag(r.status)}">${r.status}</span></div></div>`).join("") : `<div class="empty">No runs yet.</div>`;
+  $("#ag-runs").innerHTML = S.runs.length ? S.runs.slice(0, 30).map(r => `<div class="row"><div class="av ${r.status === "success" ? "past" : ["error","crashed"].includes(r.status) ? "cold" : "warm"}" style="${["error","crashed"].includes(r.status) ? "color:var(--crit)" : ""}">${r.status === "success" ? "✓" : ["error","crashed"].includes(r.status) ? "!" : "…"}</div><div><div class="t">${esc(wfName(r.workflowId))}</div><div class="d">${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)} · ${r.mode} · ${r.stoppedAt ? dur(r.startedAt, r.stoppedAt) : "in progress"}</div></div><div class="actions" style="align-items:center"><span class="tag ${runTag(r.status)}">${r.status}</span>${n8nLink("/workflow/" + encodeURIComponent(r.workflowId) + "/executions/" + encodeURIComponent(r.id), "Open")}</div></div>`).join("") : `<div class="empty">No runs yet.</div>`;
 }
 
 /* ============ ACTIVITY ============ */
@@ -861,9 +865,9 @@ function feedHTML(items){ if (!items.length) return `<div class="empty">Nothing 
 function renderActivity(){ $("#feed").innerHTML = feedHTML(S.activity); $("#feed-count").textContent = `${S.activity.length} entries`; }
 
 /* ============ SETTINGS ============ */
-$("#btn-settings").addEventListener("click", () => { const s = S.settings; $("#s-name").value = s.sender.name; $("#s-email").value = s.sender.email; $("#s-tag").value = s.sender.tagline || ""; $("#s-offers").value = s.offers || ""; $("#s-magnet").value = s.magnet || ""; $("#s-start").value = s.rampStart || todayKey(); $("#s-cap").value = s.dailyCap || 10; $("#s-batch").value = String(s.batchSize || 1); $("#s-domain").value = s.domainAuth || "unknown"; $("#s-key").value = getKey(); $("#s-key-wrap").style.display = HOSTED ? "" : "none"; $("#m-settings").classList.add("on"); });
+$("#btn-settings").addEventListener("click", () => { const s = S.settings; $("#s-name").value = s.sender.name; $("#s-email").value = s.sender.email; $("#s-tag").value = s.sender.tagline || ""; $("#s-offers").value = s.offers || ""; $("#s-magnet").value = s.magnet || ""; $("#s-start").value = s.rampStart || todayKey(); $("#s-cap").value = s.dailyCap || 10; $("#s-batch").value = String(s.batchSize || 1); $("#s-domain").value = s.domainAuth || "unknown"; $("#s-n8n").value = s.n8nUrl || ""; $("#s-key").value = getKey(); $("#s-key-wrap").style.display = HOSTED ? "" : "none"; $("#m-settings").classList.add("on"); });
 $("#s-save").addEventListener("click", async () => { const day = rampDay({ rampStart:$("#s-start").value }), maxCap = rampCap(day), want = Number($("#s-cap").value) || 10;
-  const data = { ...S.settings, sender:{ name:$("#s-name").value.trim(), email:$("#s-email").value.trim(), tagline:$("#s-tag").value.trim() }, offers:$("#s-offers").value, magnet:$("#s-magnet").value.trim(), rampStart:$("#s-start").value, dailyCap:Math.min(want, maxCap), batchSize:Number($("#s-batch").value), domainAuth:$("#s-domain").value };
+  const data = { ...S.settings, sender:{ name:$("#s-name").value.trim(), email:$("#s-email").value.trim(), tagline:$("#s-tag").value.trim() }, offers:$("#s-offers").value, magnet:$("#s-magnet").value.trim(), rampStart:$("#s-start").value, dailyCap:Math.min(want, maxCap), batchSize:Number($("#s-batch").value), domainAuth:$("#s-domain").value, n8nUrl:$("#s-n8n").value.trim().replace(/\/+$/, "") };
   if (HOSTED){ try { const k = $("#s-key").value.trim(); if (k) localStorage.setItem(KEYLS, k); else localStorage.removeItem(KEYLS); } catch {} if (!S.sample && getKey()){ S.sample = apiSample(); setConn("sample", "on", "Claude · API key"); } if (S.sample && !getKey()){ S.sample = null; setConn("sample", "off", "Claude · add API key"); } }
   await store.set("settings", "main", data); $("#m-settings").classList.remove("on"); toast(want > maxCap ? `Cap held at ${maxCap} for day ${day} of the ramp` : "Settings saved"); });
 $$("[data-close]").forEach(b => b.addEventListener("click", () => b.closest(".modal").classList.remove("on")));
