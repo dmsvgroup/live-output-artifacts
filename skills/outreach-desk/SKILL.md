@@ -45,3 +45,14 @@ and these capabilities:
 ## Re-publishing
 Edit the template, then publish the same file path (or pass the artifact `url`). Omit
 `capabilities` to keep the stored declaration.
+
+## Web-server build (`site/index.html`)
+`site/index.html` is the same page wrapped as a full document for hosting on any static
+server (Vercel, Netlify, S3). It detects the missing claude.ai runtime and switches to
+hosted mode: data stays in that browser's local storage, drafting uses an Anthropic API
+key the user enters in Settings (kept in local storage only, `claude-opus-5` over raw
+HTTPS with server-side refusal fallbacks enabled), and Approve opens a prefilled Gmail
+compose window instead of creating a draft through the connector. Calendar and reply
+watching are not available in hosted mode. Regenerate it from the template when the
+fragment changes: doctype + head (charset, viewport, noindex, the font link, the style
+block) + body (the rest).
