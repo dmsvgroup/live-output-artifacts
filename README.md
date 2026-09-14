@@ -15,13 +15,15 @@ live-output-artifacts/
 ├── commands/
 │   ├── agents-home.md       # /agents-home
 │   ├── rockstar-chat.md     # /rockstar-chat
-│   └── digital-dna.md       # /digital-dna [shallow|deep] [scan|build|connect|validate]
+│   ├── digital-dna.md       # /digital-dna [shallow|deep] [scan|build|connect|validate]
+│   └── route-intelligence.md  # /route-intelligence — DMSV routing command center
 ├── skills/
 │   ├── render-live-artifact/
 │   │   ├── SKILL.md         # drives the auto-artifact behavior
 │   │   └── templates/live-artifact.html
 │   ├── rockstar-agents-home/  # command center + Outputs tab
 │   ├── rockstar-chat/         # chat panel wired to the rockstar orchestrator
+│   ├── dmsv-route-intelligence/  # executive routing console (map, AI score, memo)
 │   └── digital-dna/
 │       ├── SKILL.md         # SCAN → BUILD → CONNECT → VALIDATE
 │       ├── reference/

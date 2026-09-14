@@ -1,0 +1,648 @@
+<title>Kerrobert Route Intelligence</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0b1016; --panel:#121a22; --panel-2:#0e151c; --line:#22303d; --line-soft:#1a2531;
+    --ink:#e6edf3; --muted:#8b9bab; --faint:#5b6b7b;
+    --ra:#3b82f6; --rb:#0f9f8f; --rc:#a855f7;
+    --good:#4ade80; --warn:#fbbf24; --crit:#f87171; --info:#7dd3fc;
+    --sans:"IBM Plex Sans",-apple-system,"Segoe UI",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    --r:8px;
+  }
+  *{ box-sizing:border-box }
+  html,body{ margin:0; background:var(--bg); color:var(--ink); }
+  body{ font:13px/1.45 var(--sans); padding-block:0 32px; padding-inline:16px; -webkit-font-smoothing:antialiased; }
+  button{ font:inherit; color:inherit; cursor:pointer; }
+  button:focus-visible, [tabindex]:focus-visible{ outline:2px solid var(--info); outline-offset:2px; }
+  .num{ font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .eyebrow{ font:600 10.5px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+
+  /* ---------- top bar ---------- */
+  .top{ display:flex; align-items:center; gap:22px; flex-wrap:wrap; padding:12px 0 10px; border-bottom:1px solid var(--line); }
+  .brand{ display:flex; align-items:center; gap:10px; min-width:200px; }
+  .brand .mark{ width:32px; height:32px; border-radius:7px; background:var(--panel); border:1px solid var(--line); display:grid; place-items:center; }
+  .brand .mark svg{ width:20px; height:20px; }
+  .brand .t1{ font-weight:700; font-size:14px; letter-spacing:.02em; }
+  .brand .t2{ font:500 9.5px/1 var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-top:3px; }
+  .proj{ border-left:1px solid var(--line); padding-left:22px; }
+  .proj .t1{ font-weight:600; font-size:13.5px; }
+  .proj .t2{ color:var(--muted); font-size:12px; margin-top:2px; }
+  .tabs{ display:flex; gap:2px; margin-left:auto; flex-wrap:wrap; }
+  .tab{ background:transparent; border:0; border-bottom:2px solid transparent; padding:10px 12px 9px; font:500 11px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  .tab:hover{ color:var(--ink) }
+  .tab[aria-selected="true"]{ color:var(--ink); border-bottom-color:var(--rb); }
+  .phase-pill{ display:inline-flex; align-items:center; gap:7px; padding:6px 11px; border-radius:999px; border:1px solid var(--line); background:var(--panel); font:500 10.5px/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--muted); white-space:nowrap; }
+  .phase-pill::before{ content:""; width:7px; height:7px; border-radius:50%; background:var(--good); box-shadow:0 0 8px var(--good); animation:pulse 2s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.35} }
+  @media (prefers-reduced-motion: reduce){ .phase-pill::before{ animation:none } * { transition:none !important } }
+
+  /* ---------- KPI strip ---------- */
+  .kpis{ display:grid; grid-template-columns:repeat(8, minmax(0,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; margin-top:12px; }
+  .kpi{ background:var(--panel); padding:10px 12px; min-width:0; }
+  .kpi .l{ font:600 9.5px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .kpi .v{ font-weight:600; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .kpi .v .num{ font-size:16px }
+  .kpi .s{ font-size:11px; color:var(--muted); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .kpi .s.good{ color:var(--good) }
+  .kpi.stage{ background:linear-gradient(180deg, rgba(15,159,143,.14), rgba(15,159,143,.04)); }
+
+  /* ---------- main grid ---------- */
+  .main{ display:grid; grid-template-columns:196px minmax(0,1fr) 272px; gap:12px; margin-top:12px; align-items:start; }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--r); }
+  .panel > .ph{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px 8px; border-bottom:1px solid var(--line-soft); }
+  .panel > .pb{ padding:10px 12px 12px; }
+
+  /* layers rail */
+  .layers .row{ display:flex; align-items:center; gap:8px; padding:5px 0; font-size:12px; }
+  .layers .row input{ accent-color:var(--rb); width:13px; height:13px; margin:0; }
+  .layers .row .sw{ width:14px; height:3px; border-radius:2px; flex:0 0 auto; }
+  .layers .sub{ padding-left:22px; }
+  .tools .row{ display:flex; align-items:center; gap:9px; padding:5px 0; font-size:12px; color:var(--muted); }
+  .tools .row svg{ width:14px; height:14px; color:var(--faint) }
+  .basemap{ display:grid; gap:6px; }
+  .basemap button{ display:flex; align-items:center; gap:9px; padding:6px; border-radius:6px; border:1px solid var(--line); background:var(--panel-2); text-align:left; font-size:12px; }
+  .basemap button[aria-pressed="true"]{ border-color:var(--rb); }
+  .basemap .thumb{ width:36px; height:26px; border-radius:4px; flex:0 0 auto; background:
+      linear-gradient(90deg, transparent 49%, rgba(255,255,255,.18) 50%, transparent 51%),
+      linear-gradient(0deg, transparent 49%, rgba(255,255,255,.18) 50%, transparent 51%), #3b4a2e; background-size:12px 12px, 12px 12px, auto; }
+  .basemap .thumb.hyb{ background-color:#2c3540; }
+
+  /* map */
+  .mapwrap{ position:relative; border-radius:var(--r); overflow:hidden; border:1px solid var(--line); background:#1f2a1c; }
+  .mapwrap svg.map{ display:block; width:100%; height:auto; aspect-ratio:1000/480; max-width:100%; }
+  .map .grid line{ stroke:rgba(255,255,255,.07); stroke-width:1; }
+  .map .grid line.road{ stroke:rgba(225,215,190,.42); stroke-width:1.2; }
+  .map text{ font-family:var(--mono); fill:var(--ink); }
+  .map .kp text{ font-size:9px; font-weight:600; fill:#fff; }
+  .map .hub rect{ fill:#0b1016; stroke:#e6edf3; stroke-width:1; }
+  .map .hub text{ font-size:8.5px; font-weight:600; fill:#fff; }
+  .map .town text{ font-size:10px; fill:#fff; font-family:var(--sans); font-weight:500; paint-order:stroke; stroke:rgba(0,0,0,.6); stroke-width:3px; }
+  .map .route{ fill:none; stroke-linecap:round; stroke-linejoin:round; cursor:pointer; transition:opacity .2s; }
+  .map .route.halo{ stroke:rgba(0,0,0,.45); stroke-width:7; pointer-events:none; }
+  .map .route.dim{ opacity:.45 }
+  .map .feat{ cursor:pointer }
+  .map .feat circle{ stroke:#0b1016; stroke-width:1.2 }
+  .map .feat .hit{ fill:transparent; stroke:none }
+  .map .scale line{ stroke:#fff; stroke-width:2 }
+  .map .scale text{ font-size:9px; fill:#fff }
+  .mapctl{ position:absolute; left:10px; top:10px; display:grid; gap:4px; }
+  .mapctl button{ width:26px; height:26px; border-radius:5px; border:1px solid var(--line); background:rgba(11,16,22,.85); color:var(--ink); font:600 13px var(--mono); display:grid; place-items:center; }
+  .maplegend{ position:absolute; right:10px; bottom:8px; display:flex; gap:12px; flex-wrap:wrap; justify-content:center; padding:6px 10px; border-radius:6px; background:rgba(11,16,22,.82); border:1px solid var(--line); font-size:10.5px; color:var(--ink); max-width:calc(100% - 24px); }
+  .maplegend span{ display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .maplegend i{ width:9px; height:9px; border-radius:50%; border:1px solid rgba(0,0,0,.6); display:inline-block; }
+  .maptip{ position:absolute; pointer-events:none; background:rgba(11,16,22,.95); border:1px solid var(--line); border-radius:6px; padding:7px 9px; font-size:11.5px; max-width:220px; display:none; z-index:3; }
+  .maptip b{ display:block; margin-bottom:2px }
+  .maptip .num{ color:var(--muted) }
+  .maprow{ position:absolute; right:10px; top:10px; display:flex; gap:6px; }
+  .chip{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; font:500 10px/1 var(--mono); letter-spacing:.06em; text-transform:uppercase; border:1px solid var(--line); background:rgba(11,16,22,.85); color:var(--muted); }
+  .chip i{ width:7px; height:7px; border-radius:50%; display:inline-block; }
+
+  /* panel row */
+  .row3{ display:grid; grid-template-columns:minmax(0,1.7fr) minmax(0,1.15fr) minmax(0,.62fr); gap:12px; margin-top:12px; }
+  .cards{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }
+  .rcard{ border:1px solid var(--line); border-radius:6px; padding:9px 10px; background:var(--panel-2); cursor:pointer; text-align:left; width:100%; transition:border-color .15s; }
+  .rcard:hover{ border-color:var(--muted) }
+  .rcard[aria-pressed="true"]{ border-color:var(--rb); box-shadow:inset 0 0 0 1px rgba(15,159,143,.4); }
+  .rcard .h{ display:flex; align-items:center; gap:6px; margin-bottom:7px; font-weight:600; font-size:12px; flex-wrap:wrap; }
+  .rcard .h i{ width:10px; height:10px; border-radius:50%; flex:0 0 auto; }
+  .rcard .rec{ flex-basis:100%; font:600 9px/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--good); }
+  .rcard dl{ margin:0; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:3px 8px; font-size:11px; }
+  .rcard dt{ color:var(--muted); min-width:0 } .rcard dd{ margin:0; text-align:right; font-weight:500; white-space:nowrap }
+  .rcard dd.hi{ color:var(--crit) } .rcard dd.md{ color:var(--warn) } .rcard dd.lo{ color:var(--good) }
+  .stars{ margin-top:7px; padding-top:7px; border-top:1px solid var(--line-soft); font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
+  .stars .s{ color:var(--warn); letter-spacing:1px }
+
+  .ai .cols{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .ai h4{ margin:0 0 6px; font:600 10px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+  .ai h4.adv{ color:var(--good) } .ai h4.con{ color:var(--warn) }
+  .ai ul{ margin:0; padding:0; list-style:none; display:grid; gap:5px; font-size:11.5px; }
+  .ai li{ display:flex; gap:6px; align-items:flex-start; }
+  .ai li::before{ content:""; flex:0 0 auto; width:6px; height:6px; border-radius:50%; margin-top:5px; }
+  .ai .adv + ul li::before{ background:var(--good) } .ai .con + ul li::before{ background:var(--warn) }
+  .rec{ margin-top:10px; padding:9px 10px; border-radius:6px; background:rgba(15,159,143,.1); border:1px solid rgba(15,159,143,.35); font-size:11.5px; }
+  .rec b{ display:block; font:600 10px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--rb); margin-bottom:5px; }
+
+  .steps{ display:grid; gap:0; }
+  .step{ display:grid; grid-template-columns:22px 1fr; gap:8px; padding:6px 0; position:relative; }
+  .step + .step::before{ content:""; position:absolute; left:10px; top:-8px; height:14px; border-left:1px dashed var(--line); }
+  .step .n{ width:22px; height:22px; border-radius:50%; border:1px solid var(--line); display:grid; place-items:center; font:600 10px var(--mono); color:var(--muted); background:var(--panel-2); }
+  .step.done .n{ background:var(--rb); border-color:var(--rb); color:#06201d; }
+  .step.now .n{ border-color:var(--rb); color:var(--rb); }
+  .step .t{ font-size:12px; font-weight:500; }
+  .step .s{ font-size:10.5px; color:var(--muted); }
+  .step.done .s{ color:var(--good) } .step.now .s{ color:var(--rb) }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:10px; padding:9px 12px; border-radius:6px; border:1px solid var(--rb); background:rgba(15,159,143,.18); color:var(--ink); font:600 11px/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; }
+  .btn:hover{ background:rgba(15,159,143,.3) }
+  .btn:disabled{ opacity:.5; cursor:default }
+
+  /* right rail */
+  .score{ display:flex; gap:12px; align-items:center; }
+  .ring{ width:78px; height:78px; flex:0 0 auto; position:relative; }
+  .ring svg{ width:100%; height:100%; transform:rotate(-90deg); }
+  .ring .c{ position:absolute; inset:0; display:grid; place-items:center; text-align:center; }
+  .ring .c .n{ font:600 22px/1 var(--mono); }
+  .ring .c .d{ font-size:9px; color:var(--muted); margin-top:2px }
+  .ring .grade{ font:600 10px/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--good); text-align:center; margin-top:5px; }
+  .bars{ flex:1; display:grid; gap:5px; min-width:0; }
+  .bar{ display:grid; grid-template-columns:1fr 26px; gap:6px; align-items:center; font-size:11px; }
+  .bar .l{ color:var(--muted); display:flex; justify-content:space-between; gap:4px; }
+  .bar .tr{ grid-column:1/-1; height:3px; border-radius:2px; background:var(--line-soft); overflow:hidden; margin-top:-2px; }
+  .bar .fl{ display:block; height:100%; background:var(--rb); transition:width .4s ease; }
+  .fs{ display:grid; gap:0; }
+  .fs .r{ display:grid; grid-template-columns:18px 1fr auto auto; gap:8px; align-items:center; padding:5px 0; border-bottom:1px solid var(--line-soft); font-size:11.5px; }
+  .fs .r:last-child{ border-bottom:0 }
+  .fs .r i{ width:14px; height:14px; border-radius:50%; border:1px solid rgba(0,0,0,.6); display:inline-block; }
+  .fs .r .c{ font-weight:600 }
+  .imp{ font:500 9.5px/1 var(--mono); letter-spacing:.06em; text-transform:uppercase; padding:3px 6px; border-radius:4px; }
+  .imp.hi{ color:var(--crit); background:rgba(248,113,113,.12) } .imp.md{ color:var(--warn); background:rgba(251,191,36,.12) } .imp.lo{ color:var(--good); background:rgba(74,222,128,.12) }
+  .terrain svg{ width:100%; height:auto; display:block; }
+  .terrain .stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px; }
+  .terrain .stats div{ font-size:10px; color:var(--muted); }
+  .terrain .stats b{ display:block; font:600 12px var(--mono); color:var(--ink); margin-top:2px }
+  .conf{ display:flex; align-items:center; gap:12px; }
+  .conf .pct{ width:56px; height:56px; border-radius:50%; display:grid; place-items:center; font:600 15px var(--mono); border:3px solid var(--good); color:var(--good); flex:0 0 auto; }
+  .conf .t{ font-size:11.5px; } .conf .t b{ display:block; color:var(--good); margin-bottom:2px; font-size:12px; }
+
+  /* other views */
+  .view{ display:none; margin-top:12px; }
+  .view.on{ display:block }
+  .view h2{ margin:0 0 4px; font-size:16px; font-weight:600; text-wrap:balance; }
+  .view .lead{ color:var(--muted); font-size:12.5px; margin:0 0 12px; max-width:68ch; }
+  .g3{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+  table.t{ width:100%; border-collapse:collapse; font-size:12px; }
+  table.t th{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); font:600 10px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); white-space:nowrap; }
+  table.t td{ padding:7px 10px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+  table.t td.n, table.t th.n{ text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  table.t tr.sel td{ background:rgba(15,159,143,.08) }
+  .tablewrap{ overflow-x:auto; }
+  .filters{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .filters select, .filters input{ background:var(--panel-2); border:1px solid var(--line); color:var(--ink); border-radius:6px; padding:6px 8px; font:12px var(--sans); }
+  .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; vertical-align:-1px; margin-right:6px; border:1px solid rgba(0,0,0,.5); }
+  .memo{ max-width:72ch; font-size:13px; line-height:1.6; }
+  .memo h3{ font-size:13px; margin:16px 0 6px; font-weight:600; }
+  .memo p{ margin:0 0 8px }
+  .memo .meta{ display:grid; grid-template-columns:auto 1fr; gap:3px 14px; font-size:12px; color:var(--muted); margin-bottom:10px; }
+  .memo .meta b{ color:var(--ink); font-weight:500 }
+  .toast{ position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--panel); border:1px solid var(--rb); border-radius:6px; padding:9px 14px; font-size:12px; display:none; z-index:9; }
+  .toast.on{ display:block }
+
+  @media (max-width:1080px){
+    .main{ grid-template-columns:180px minmax(0,1fr); }
+    .rail{ grid-column:1/-1; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .kpis{ grid-template-columns:repeat(4, minmax(0,1fr)); }
+    .row3{ grid-template-columns:1fr 1fr } .row3 > :first-child{ grid-column:1/-1 }
+  }
+  @media (max-width:720px){
+    .main, .rail, .row3, .cards, .g3{ grid-template-columns:1fr }
+    .kpis{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+    .proj{ border-left:0; padding-left:0 }
+    .tabs{ margin-left:0 } .maplegend{ display:none }
+  }
+</style>
+
+<div id="app">
+  <header class="top">
+    <div class="brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#0f9f8f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 L9 8 L13 15 L16 11 L20 18"/><circle cx="9" cy="8" r="1.6" fill="#0f9f8f"/><circle cx="16" cy="11" r="1.6" fill="#0f9f8f"/></svg></div>
+      <div><div class="t1">DMSV</div><div class="t2">Intelligence Command Center</div></div>
+    </div>
+    <div class="proj">
+      <div class="t1">Kerrobert Gathering System</div>
+      <div class="t2">Route Intelligence &amp; Analysis · Phase 1 · Routing</div>
+    </div>
+    <nav class="tabs" role="tablist" id="tabs"></nav>
+    <span class="phase-pill">Live · Phase 1 of 5</span>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="Key figures"></section>
+
+  <!-- ===== Route Intelligence ===== -->
+  <section class="view on" id="view-route" role="tabpanel">
+  <div class="main">
+    <aside>
+      <div class="panel layers"><div class="ph"><span class="eyebrow">Layers</span></div><div class="pb" id="layers"></div></div>
+      <div class="panel tools" style="margin-top:12px"><div class="ph"><span class="eyebrow">Map tools</span></div><div class="pb">
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l7 16 2-7 7-2z"/></svg>Select</div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l14-14 4 4-14 14H3z"/><path d="M7 13l4 4"/></svg>Measure</div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>Add point</div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20L21 4"/></svg>Add line</div>
+        <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7-4-4-7 7v4z"/></svg>Drawing</div>
+      </div></div>
+      <div class="panel" style="margin-top:12px"><div class="ph"><span class="eyebrow">Base map</span></div><div class="pb basemap" id="basemap">
+        <button type="button" data-base="sat" aria-pressed="true"><span class="thumb"></span>Satellite</button>
+        <button type="button" data-base="hyb" aria-pressed="false"><span class="thumb hyb"></span>Hybrid</button>
+      </div></div>
+    </aside>
+
+    <section>
+      <div class="mapwrap" id="mapwrap">
+        <svg class="map" id="map" viewBox="0 0 1000 480" role="img" aria-label="Route map, Kerrobert gathering system"></svg>
+        <div class="mapctl"><button type="button" id="zin" title="Zoom in">+</button><button type="button" id="zout" title="Zoom out">−</button><button type="button" id="zfit" title="Fit">⌂</button></div>
+        <div class="maprow" id="mapchips"></div>
+        <div class="maplegend" id="maplegend"></div>
+        <div class="maptip" id="maptip"></div>
+      </div>
+
+      <div class="row3">
+        <div class="panel"><div class="ph"><span class="eyebrow">Route comparison · Phase 1 · non-cost</span><span class="eyebrow" style="color:var(--faint)">click to select</span></div><div class="pb cards" id="cards"></div></div>
+        <div class="panel ai"><div class="ph"><span class="eyebrow">AI route analysis</span><span class="eyebrow" id="ai-route" style="color:var(--faint)"></span></div><div class="pb" id="ai"></div></div>
+        <div class="panel"><div class="ph"><span class="eyebrow">Next steps</span></div><div class="pb"><div class="steps" id="steps"></div><button type="button" class="btn" id="proceed">Proceed to Phase 2 →</button></div></div>
+      </div>
+    </section>
+
+    <aside class="rail">
+      <div class="panel"><div class="ph"><span class="eyebrow">Route intelligence summary</span></div><div class="pb">
+        <div class="eyebrow" style="margin-bottom:8px">Route score (AI)</div>
+        <div class="score"><div class="ring" id="ring"></div><div class="bars" id="scorebars"></div></div>
+      </div></div>
+      <div class="panel" style="margin-top:12px"><div class="ph"><span class="eyebrow">Feature summary</span><span class="eyebrow" id="fs-total" style="color:var(--faint)"></span></div><div class="pb fs" id="fsum"></div></div>
+      <div class="panel terrain" style="margin-top:12px"><div class="ph"><span class="eyebrow">Terrain profile</span><span class="eyebrow" style="color:var(--faint)">elev · m</span></div><div class="pb"><div id="terrain"></div><div class="stats" id="tstats"></div></div></div>
+      <div class="panel" style="margin-top:12px"><div class="ph"><span class="eyebrow">Confidence level</span></div><div class="pb conf" id="conf"></div></div>
+    </aside>
+  </div>
+  </section>
+
+  <!-- ===== AI analysis ===== -->
+  <section class="view" id="view-ai" role="tabpanel">
+    <h2>AI route analysis, all corridors</h2>
+    <p class="lead">Advantages and concerns per corridor, scored on the same six factors. The recommendation is a Phase 1 routing call only; cost enters at Phase 5.</p>
+    <div class="g3" id="ai-all"></div>
+  </section>
+
+  <!-- ===== Features ===== -->
+  <section class="view" id="view-features" role="tabpanel">
+    <h2>Feature register</h2>
+    <p class="lead">Every crossing, conflict and site the routing model identified, by kilometre post. Filter by corridor or feature type.</p>
+    <div class="filters">
+      <label for="f-route" class="eyebrow">Route</label><select id="f-route"><option value="B">Route B</option><option value="A">Route A</option><option value="C">Route C</option></select>
+      <label for="f-type" class="eyebrow">Type</label><select id="f-type"><option value="">All types</option></select>
+      <label for="f-q" class="eyebrow">Find</label><input id="f-q" type="search" placeholder="KP, note…">
+      <span class="eyebrow" id="f-count" style="margin-left:auto"></span>
+    </div>
+    <div class="panel tablewrap"><table class="t" id="ftable"><thead><tr><th class="n">KP</th><th>Type</th><th>Impact</th><th>Method</th><th>Note</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <!-- ===== Profile ===== -->
+  <section class="view" id="view-profile" role="tabpanel">
+    <h2>Terrain profile</h2>
+    <p class="lead">Elevation along the selected corridor from HUB 1 to Kerrobert Terminal. Hover to read elevation and grade at any kilometre post.</p>
+    <div class="panel"><div class="ph"><span class="eyebrow" id="prof-title"></span><span class="eyebrow" style="color:var(--faint)">elevation · metres above sea level</span></div><div class="pb"><div id="profile-big"></div><div class="stats terrain" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px" id="prof-stats"></div></div></div>
+  </section>
+
+  <!-- ===== Compare ===== -->
+  <section class="view" id="view-compare" role="tabpanel">
+    <h2>Corridor comparison</h2>
+    <p class="lead">All Phase 1 factors side by side. Cost is deliberately absent until Phase 5 so routing is judged on constructability and risk first.</p>
+    <div class="panel tablewrap"><table class="t" id="ctable"></table></div>
+  </section>
+
+  <!-- ===== Reports ===== -->
+  <section class="view" id="view-reports" role="tabpanel">
+    <h2>Phase 1 routing memo</h2>
+    <div class="panel"><div class="pb memo" id="memo"></div></div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- data ----------------
+   Static demonstration data for the Kerrobert corridor study. Replace ROUTES / FEATURE
+   generation with a live source (e.g. window.cowork.callMcpTool) to drive this from a model. */
+const KM_PX = 860 / 18.4;             // map scale: 18.4 km corridor spans ~860 px
+const TABS = [["route","Route intelligence"],["ai","AI analysis"],["features","Features"],["profile","Profile"],["compare","Compare"],["reports","Reports"]];
+const FACTORS = [["constructability","Constructability"],["accessibility","Accessibility"],["environmental","Environmental"],["utility","Utility conflicts"],["terrain","Terrain"],["expansion","Expansion readiness"]];
+const FTYPES = {
+  road:    { name:"Road crossing",    color:"#e2c08d", method:"Open cut / bore" },
+  water:   { name:"Water crossing",   color:"#7dd3fc", method:"HDD" },
+  rail:    { name:"Rail crossing",    color:"#f87171", method:"Bore, permit" },
+  wetland: { name:"Wetland",          color:"#86efac", method:"Winter construction" },
+  utility: { name:"Utility conflict", color:"#fbbf24", method:"Locate / re-route" },
+  valve:   { name:"Valve site",       color:"#e6edf3", method:"Above-ground" },
+};
+const IMPACT = { hi:"High", md:"Medium", lo:"Low" };
+const ROUTES = {
+  A: { name:"Route A", color:"#3b82f6", dash:"10 6", length:19.7, score:89, confidence:90, stars:3.5, rec:false,
+       path:"M70,180 L150,118 L320,108 L500,128 L700,168 L850,232 L930,300",
+       factors:{ constructability:82, accessibility:91, environmental:72, utility:93, terrain:98, expansion:98 },
+       counts:{ road:101, water:13, rail:2, wetland:4, utility:7, valve:5 },
+       impacts:{ road:"md", water:"hi", rail:"hi", wetland:"md", utility:"lo", valve:"lo" },
+       permitting:"hi", access:"md", expansion:"md",
+       terrain:{ min:631, max:712, slope:2.1, flat:94, seed:11 },
+       adv:["Shortest permitting path across Crown land north of the rail line","Avoids the KP 12–14 wetland complex entirely","Strong expansion corridor toward the northern leases"],
+       con:["13 water crossings, three on the same creek system (HDD required)","Constructability 82: 6.1 km of new right-of-way with no existing corridor","Higher environmental impact from greenfield disturbance","Two rail crossings, permit lead time 6–9 months"],
+       summary:"Route A is a viable northern alternative if the wetland window becomes a constraint, but its greenfield share raises constructability risk and environmental impact." },
+  B: { name:"Route B", color:"#0f9f8f", dash:"", length:18.4, score:97, confidence:93, stars:5, rec:true,
+       path:"M70,180 L180,200 L300,228 L420,240 L560,250 L700,270 L820,290 L930,300",
+       factors:{ constructability:95, accessibility:92, environmental:88, utility:96, terrain:99, expansion:94 },
+       counts:{ road:90, water:11, rail:2, wetland:3, utility:14, valve:5 },
+       impacts:{ road:"md", water:"hi", rail:"hi", wetland:"md", utility:"lo", valve:"lo" },
+       permitting:"md", access:"hi", expansion:"hi",
+       terrain:{ min:629, max:699, slope:1.6, flat:97, seed:7 },
+       adv:["Follows the existing pipeline corridor for 14.7 km (80% of route)","Flat terrain, 97% under 2% grade, easy construction","Good access from existing grid roads at every section line","Minimal rock excavation expected from adjacent as-builts","Close to existing facilities at HUB 2 and HUB 3"],
+       con:["11 water crossings (HDD required)","2 rail crossings, permit required","Utility conflicts at 3 locations near KP 9","Wetlands near KP 12–14","Environmental window limits work to Oct–Mar at the wetland"],
+       summary:"Route B provides the best overall balance of constructability, environmental impact, access, and operational efficiency. Proceed to Phase 2 for preliminary estimate." },
+  C: { name:"Route C", color:"#a855f7", dash:"2 6", length:21.3, score:78, confidence:86, stars:3, rec:false,
+       path:"M70,180 L120,262 L262,332 L450,362 L640,342 L800,322 L930,300",
+       factors:{ constructability:68, accessibility:79, environmental:65, utility:88, terrain:97, expansion:71 },
+       counts:{ road:108, water:9, rail:3, wetland:8, utility:15, valve:5 },
+       impacts:{ road:"md", water:"md", rail:"hi", wetland:"hi", utility:"md", valve:"lo" },
+       permitting:"hi", access:"lo", expansion:"lo",
+       terrain:{ min:624, max:705, slope:1.9, flat:95, seed:3 },
+       adv:["Fewest water crossings of the three corridors","Parallels the rail line for 9 km, simplifying survey"],
+       con:["Longest corridor at 21.3 km, 2.9 km more pipe than Route B","Eight wetland encroachments south of the rail line","Three rail crossings including the Kerrobert yard approach","Poor access: 7 km with no grid road within 1.6 km","Expansion readiness 71: dead-ends against the southern lease boundary"],
+       summary:"Route C is the least attractive option. Length, wetland exposure and poor access outweigh its lower water-crossing count." },
+};
+const STEPS = [["Route intelligence","Complete","done"],["AI route analysis","In progress","now"],["Preliminary estimate","Locked",""],["Benchmarking","Locked",""],["Cost estimation","Locked",""]];
+const state = { route:"B", tab:"route", base:"sat", zoom:1, layers:{ routes:true, A:true, B:true, C:true, pipeline:true, roads:true, rail:true, water:true, wetland:true, power:true, facilities:true, land:false } };
+
+/* ---------------- helpers ---------------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = (n, d=0) => Number(n).toLocaleString("en-CA",{ minimumFractionDigits:d, maximumFractionDigits:d });
+function rng(seed){ let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs={}, parent){ const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+
+/* per-route derived data: feature register + elevation profile (deterministic) */
+const DERIVED = {};
+for (const id in ROUTES){
+  const r = ROUTES[id], rand = rng(r.seed || r.terrain.seed * 101);
+  const feats = [];
+  for (const t in r.counts){
+    for (let i = 0; i < r.counts[t]; i++){
+      const kp = +(rand() * r.length).toFixed(2);
+      const imp = t === "road" ? (rand() < .15 ? "hi" : rand() < .5 ? "md" : "lo") : r.impacts[t];
+      const notes = {
+        road:[ "Grid road, gravel", "Range road, gravel", "Township road, paved", "Approach, private" ],
+        water:[ "Creek, seasonal", "Drainage channel", "Unnamed tributary", "Slough outflow" ],
+        rail:[ "CN mainline", "Industrial spur" ],
+        wetland:[ "Class III marsh", "Seasonal slough", "Class IV wetland" ],
+        utility:[ "Buried telecom", "Overhead 25 kV line", "Existing 6-inch gathering line", "Fibre conduit" ],
+        valve:[ "Mainline block valve", "Check valve site" ],
+      }[t];
+      feats.push({ kp, type:t, imp, note: notes[Math.floor(rand() * notes.length)] });
+    }
+  }
+  feats.sort((a,b) => a.kp - b.kp);
+  // elevation profile: gentle prairie, 0.25 km steps
+  const n = Math.round(r.length / 0.25) + 1, er = rng(r.terrain.seed), prof = [];
+  let e = r.terrain.min + (r.terrain.max - r.terrain.min) * .45, v = 0;
+  for (let i = 0; i < n; i++){ v = v * .82 + (er() - .5) * 3.2; e = Math.min(r.terrain.max, Math.max(r.terrain.min, e + v)); prof.push(+e.toFixed(1)); }
+  prof[0] = r.terrain.min + 8; prof[n-1] = r.terrain.max - 6;
+  DERIVED[id] = { feats, prof };
+}
+
+/* ---------------- tabs ---------------- */
+function renderTabs(){
+  $("#tabs").innerHTML = TABS.map(([id, name]) => `<button type="button" class="tab" role="tab" id="tab-${id}" aria-selected="${state.tab===id}" data-tab="${id}">${name}</button>`).join("");
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "view-" + state.tab));
+}
+$("#tabs").addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if (!b) return; state.tab = b.dataset.tab; renderTabs(); renderView(); });
+
+/* ---------------- KPI strip ---------------- */
+function renderKpis(){
+  const r = ROUTES[state.route], total = Object.values(r.counts).reduce((a,b) => a+b, 0);
+  $("#kpis").innerHTML = [
+    ["Project area", "Kerrobert, SK", "RM of Oakdale No. 320"],
+    ["Selected route", `<span style="color:${r.color}">${r.name}</span>`, r.rec ? "Recommended" : "Alternative", r.rec],
+    ["Route length", `<span class="num">${fmt(r.length,1)}</span> km`, `HUB 1 → Kerrobert Terminal`],
+    ["Corridor width", `<span class="num">1.0</span> km`, "Study buffer"],
+    ["Features", `<span class="num">${fmt(total)}</span>`, "Crossings, conflicts, sites"],
+    ["Route score", `<span class="num">${r.score}</span> /100`, r.score >= 90 ? "Excellent" : r.score >= 80 ? "Good" : "Fair", r.score >= 90],
+    ["Confidence", `<span class="num">${r.confidence}%</span>`, "Data quality, validated"],
+    ["Analysis stage", "Routing", "Phase 1 of 5", false, true],
+  ].map(([l,v,s,good,stage]) => `<div class="kpi${stage?" stage":""}"><div class="l">${l}</div><div class="v">${v}</div><div class="s${good?" good":""}">${s}</div></div>`).join("");
+}
+
+/* ---------------- map ---------------- */
+const LAYERS = [
+  ["routes","Route options",null,[["A","Route A",ROUTES.A.color],["B","Route B (rec.)",ROUTES.B.color],["C","Route C",ROUTES.C.color]]],
+  ["pipeline","Existing pipeline","#9aa5b1"],["roads","Roads","#e2c08d"],["rail","Railways","#f87171"],["water","Waterways","#7dd3fc"],
+  ["wetland","Wetlands","#86efac"],["power","Powerlines","#fbbf24"],["facilities","Facilities","#e6edf3"],["land","Land ownership","#c084fc"],
+];
+function renderLayers(){
+  $("#layers").innerHTML = LAYERS.map(([id,name,color,subs]) => `
+    <label class="row"><input type="checkbox" id="ly-${id}" data-layer="${id}" ${state.layers[id]?"checked":""}>${color?`<span class="sw" style="background:${color}"></span>`:""}${name}</label>
+    ${subs ? subs.map(([sid,sn,sc]) => `<label class="row sub"><input type="checkbox" id="ly-${sid}" data-layer="${sid}" ${state.layers[sid]?"checked":""}><span class="sw" style="background:${sc}"></span>${sn}</label>`).join("") : ""}`).join("");
+}
+$("#layers").addEventListener("change", e => { const i = e.target; if (!i.dataset.layer) return; state.layers[i.dataset.layer] = i.checked; applyLayers(); });
+function applyLayers(){
+  const svg = $("#map");
+  for (const id in state.layers){ const g = svg.querySelector(`[data-group="${id}"]`); if (g) g.style.display = state.layers[id] && (["A","B","C"].includes(id) ? state.layers.routes : true) ? "" : "none"; }
+}
+
+function buildMap(){
+  const svg = $("#map"); svg.innerHTML = "";
+  const defs = el("defs", {}, svg);
+  const hatch = el("pattern", { id:"hatch", width:6, height:6, patternUnits:"userSpaceOnUse", patternTransform:"rotate(45)" }, defs);
+  el("rect", { width:6, height:6, fill:"rgba(134,239,172,.16)" }, hatch); el("line", { x1:0, y1:0, x2:0, y2:6, stroke:"#86efac", "stroke-width":1.2, "stroke-opacity":.8 }, hatch);
+  const field = el("pattern", { id:"field", width:75, height:75, patternUnits:"userSpaceOnUse" }, defs);
+  el("rect", { width:75, height:75, fill: state.base === "sat" ? "#2a3b22" : "#232c36" }, field);
+  el("rect", { x:0, y:0, width:37, height:37, fill: state.base === "sat" ? "#33472a" : "#28323d" }, field);
+  el("rect", { x:37, y:37, width:38, height:38, fill: state.base === "sat" ? "#3a4c2b" : "#2c3742" }, field);
+  el("rect", { x:37, y:0, width:38, height:37, fill: state.base === "sat" ? "#4b5233" : "#262f39" }, field);
+  el("rect", { width:1000, height:480, fill:"url(#field)" }, svg);
+
+  // section grid + grid roads (SK township grid: 1 mile sections, roads on section lines)
+  const grid = el("g", { class:"grid", "data-group":"roads" }, svg);
+  for (let x = 0; x <= 1000; x += 75) el("line", { x1:x, y1:0, x2:x, y2:480, class: (x/75)%2===0 ? "road" : "" }, grid);
+  for (let y = 0; y <= 480; y += 75) el("line", { x1:0, y1:y, x2:1000, y2:y, class: (y/75)%2===0 ? "road" : "" }, grid);
+  if (state.base === "hyb"){ [["RR 3244",150,14],["RR 3250",450,14],["RR 3255",750,14],["TWP RD 322",8,150],["TWP RD 320",8,300]].forEach(([t,x,y]) => { const tx = el("text", { x, y, "font-size":8, fill:"rgba(230,237,243,.55)" }, grid); tx.textContent = t; }); }
+  // provincial highways
+  const hw = el("g", { "data-group":"roads" }, svg);
+  el("path", { d:"M0,150 C200,140 350,135 520,120 C700,105 850,70 1000,60", fill:"none", stroke:"#e2c08d", "stroke-width":2.2, "stroke-opacity":.75 }, hw);
+  el("path", { d:"M0,420 L260,400 L620,380 L1000,372", fill:"none", stroke:"#e2c08d", "stroke-width":2.2, "stroke-opacity":.75 }, hw);
+  [["31",520,116],["21",900,66],["51",660,384]].forEach(([n,x,y]) => { el("rect", { x:x-9, y:y-8, width:18, height:14, rx:2, fill:"#e2c08d" }, hw); const t = el("text", { x, y:y+3, "font-size":8, "text-anchor":"middle", fill:"#0b1016", "font-weight":600 }, hw); t.textContent = n; });
+  // land ownership (off by default)
+  const land = el("g", { "data-group":"land" }, svg);
+  [[150,150],[300,300],[525,75],[675,225],[825,375]].forEach(([x,y]) => el("rect", { x, y, width:150, height:150, fill:"rgba(192,132,252,.12)", stroke:"#c084fc", "stroke-width":1, "stroke-dasharray":"4 3" }, land));
+  // waterways
+  const water = el("g", { "data-group":"water" }, svg);
+  el("path", { d:"M395,0 C380,60 430,110 410,170 C390,230 450,270 440,330 C430,390 480,440 470,480", fill:"none", stroke:"#7dd3fc", "stroke-width":3, "stroke-opacity":.85 }, water);
+  el("path", { d:"M600,480 C610,420 570,380 590,330 C610,290 640,260 630,210", fill:"none", stroke:"#7dd3fc", "stroke-width":2, "stroke-opacity":.7 }, water);
+  el("path", { d:"M760,0 C750,50 790,90 770,140 C755,180 730,200 725,250", fill:"none", stroke:"#7dd3fc", "stroke-width":2, "stroke-opacity":.7 }, water);
+  // wetlands
+  const wet = el("g", { "data-group":"wetland" }, svg);
+  [["M640,235 L700,228 L735,252 L720,292 L660,300 L630,270 Z"],["M250,360 L300,350 L330,380 L300,405 L255,395 Z"],["M420,300 L455,296 L470,320 L440,335 L415,322 Z"],["M120,330 L170,322 L185,350 L150,368 L112,352 Z"]].forEach(([d]) => el("path", { d, fill:"url(#hatch)", stroke:"#86efac", "stroke-width":1, "stroke-opacity":.7 }, wet));
+  // railway
+  const rail = el("g", { "data-group":"rail" }, svg);
+  el("path", { d:"M0,332 L1000,286", fill:"none", stroke:"#0b1016", "stroke-width":4 }, rail);
+  el("path", { d:"M0,332 L1000,286", fill:"none", stroke:"#f5f5f5", "stroke-width":2.4, "stroke-dasharray":"8 8" }, rail);
+  // powerlines
+  const pw = el("g", { "data-group":"power" }, svg);
+  el("path", { d:"M0,62 L1000,122", fill:"none", stroke:"#fbbf24", "stroke-width":1.2, "stroke-dasharray":"2 5", "stroke-opacity":.9 }, pw);
+  el("path", { d:"M540,480 L560,0", fill:"none", stroke:"#fbbf24", "stroke-width":1.2, "stroke-dasharray":"2 5", "stroke-opacity":.9 }, pw);
+  // existing pipeline (B corridor offset)
+  const pipe = el("g", { "data-group":"pipeline" }, svg);
+  el("path", { d:"M70,192 L180,212 L300,240 L420,252 L560,262 L700,282 L820,302 L930,312", fill:"none", stroke:"#c8d0d8", "stroke-width":1.6, "stroke-dasharray":"12 5 3 5", "stroke-opacity":.85 }, pipe);
+  const pl = el("text", { x:470, y:275, "font-size":8, fill:"rgba(230,237,243,.7)", transform:"rotate(4 470 275)" }, pipe); pl.textContent = "EXISTING 8-INCH GATHERING";
+  // facilities
+  const fac = el("g", { "data-group":"facilities" }, svg);
+  [[236,60,"Battery 4-12"],[880,140,"Compressor"],[705,400,"Delivery meter manifold 155"]].forEach(([x,y,n]) => { el("rect", { x:x-5, y:y-5, width:10, height:10, fill:"#e6edf3", stroke:"#0b1016" }, fac); const t = el("text", { x:x+8, y:y+3, "font-size":8, fill:"rgba(230,237,243,.85)" }, fac); t.textContent = n; });
+  // town
+  const town = el("g", { class:"town" }, svg);
+  el("rect", { x:830, y:196, width:110, height:70, fill:"rgba(226,192,141,.14)", stroke:"rgba(226,192,141,.5)", "stroke-width":1 }, town);
+  const tt = el("text", { x:885, y:222, "text-anchor":"middle" }, town); tt.textContent = "Kerrobert";
+  const tt2 = el("text", { x:885, y:236, "text-anchor":"middle", "font-size":8, fill:"rgba(230,237,243,.7)" }, town); tt2.textContent = "pop. 1,061";
+
+  // routes
+  const routesG = el("g", { "data-group":"routes" }, svg);
+  ["C","A","B"].forEach(id => {
+    const r = ROUTES[id], g = el("g", { "data-group":id }, routesG);
+    el("path", { d:r.path, class:"route halo" }, g);
+    const p = el("path", { d:r.path, class:"route", "data-route":id, stroke:r.color, "stroke-width": id === state.route ? 4 : 2.6, "stroke-dasharray": r.dash }, g);
+    p.addEventListener("click", () => selectRoute(id));
+    p.addEventListener("mouseenter", ev => tip(ev, `<b style="color:${r.color}">${r.name}${r.rec?" · recommended":""}</b><span class="num">${fmt(r.length,1)} km · score ${r.score}/100</span>`));
+    p.addEventListener("mouseleave", hideTip);
+    // route label near mid
+    const pt = p.getPointAtLength(p.getTotalLength() * (id === "A" ? .42 : id === "C" ? .55 : .3));
+    const lab = el("text", { x:pt.x + 8, y:pt.y - (id === "C" ? -14 : 9), "font-size":9, "font-weight":600, fill:r.color, "paint-order":"stroke", stroke:"rgba(0,0,0,.7)", "stroke-width":3 }, g); lab.textContent = r.name.toUpperCase();
+  });
+  // features on selected route (major types only; full register on Features tab)
+  const r = ROUTES[state.route], sel = svg.querySelector(`path.route[data-route="${state.route}"]`), L = sel.getTotalLength();
+  const featG = el("g", { class:"feats" }, svg);
+  DERIVED[state.route].feats.filter(f => f.type !== "road").forEach(f => {
+    const pt = sel.getPointAtLength(L * f.kp / r.length), ft = FTYPES[f.type];
+    const g = el("g", { class:"feat" }, featG);
+    el("circle", { cx:pt.x, cy:pt.y, r:4.2, fill:ft.color }, g);
+    el("circle", { cx:pt.x, cy:pt.y, r:9, class:"hit" }, g);
+    g.addEventListener("mouseenter", ev => tip(ev, `<b>${ft.name}</b>KP <span class="num">${fmt(f.kp,2)}</span> · ${IMPACT[f.imp]} impact<br>${esc(f.note)} · ${ft.method}`));
+    g.addEventListener("mouseleave", hideTip);
+  });
+  // KP markers on selected route
+  const kpG = el("g", { class:"kp" }, svg);
+  for (let km = 0; km <= r.length; km += 2.5){
+    const pt = sel.getPointAtLength(L * km / r.length), major = km % 5 === 0;
+    el("circle", { cx:pt.x, cy:pt.y, r: major ? 5 : 3, fill: major ? "#0b1016" : r.color, stroke: major ? "#fff" : "#0b1016", "stroke-width":1.2 }, kpG);
+    if (major){ const t = el("text", { x:pt.x, y:pt.y - 9, "text-anchor":"middle" }, kpG); t.textContent = km; }
+  }
+  // hubs + terminal
+  const hubs = el("g", { class:"hub" }, svg);
+  const hubPts = [["HUB 1", 70, 180], ["HUB 2", 420, 240], ["HUB 3", 700, 270]];
+  hubPts.forEach(([n,x,y]) => { el("circle", { cx:x, cy:y, r:7, fill:"#0b1016", stroke:"#fff", "stroke-width":1.5 }, hubs); el("circle", { cx:x, cy:y, r:2.5, fill:"#fff" }, hubs); el("rect", { x:x-20, y:y-28, width:40, height:14, rx:2 }, hubs); const t = el("text", { x, y:y-18, "text-anchor":"middle" }, hubs); t.textContent = n; });
+  el("rect", { x:902, y:284, width:34, height:32, fill:"#0b1016", stroke:"#fbbf24", "stroke-width":1.5 }, hubs);
+  [[909,291],[919,291],[929,291],[909,301],[919,301],[929,301],[909,309],[919,309],[929,309]].forEach(([x,y]) => el("circle", { cx:x, cy:y, r:2, fill:"#fbbf24" }, hubs));
+  el("rect", { x:860, y:318, width:118, height:16, rx:2, fill:"#fbbf24" }, hubs);
+  const kt = el("text", { x:919, y:329, "text-anchor":"middle", "font-size":8.5, "font-weight":700, fill:"#0b1016" }, hubs); kt.textContent = "KERROBERT TERMINAL";
+  // north arrow + scale
+  const na = el("g", {}, svg); el("path", { d:"M965,22 L971,40 L965,36 L959,40 Z", fill:"#fff" }, na); const nt = el("text", { x:965, y:54, "text-anchor":"middle", "font-size":9, fill:"#fff" }, na); nt.textContent = "N";
+  const sc = el("g", { class:"scale" }, svg); const w = 5 * KM_PX; el("line", { x1:24, y1:462, x2:24+w, y2:462 }, sc); el("line", { x1:24, y1:457, x2:24, y2:467 }, sc); el("line", { x1:24+w/2, y1:458, x2:24+w/2, y2:466 }, sc); el("line", { x1:24+w, y1:457, x2:24+w, y2:467 }, sc);
+  [["0",24],["2.5",24+w/2],["5 km",24+w]].forEach(([t,x]) => { const e = el("text", { x, y:452, "text-anchor":"middle" }, sc); e.textContent = t; });
+  applyLayers(); applyZoom();
+  $("#maplegend").innerHTML = Object.entries(FTYPES).filter(([k]) => k !== "road").map(([k,v]) => `<span><i style="background:${v.color}"></i>${v.name}</span>`).join("") + `<span><i style="background:#e2c08d;border-radius:0;height:3px"></i>Road crossings: Features tab</span>`;
+  $("#mapchips").innerHTML = `<span class="chip"><i style="background:${r.color}"></i>${r.name} selected</span><span class="chip">${state.base === "sat" ? "Satellite" : "Hybrid"}</span>`;
+}
+function tip(ev, html){ const t = $("#maptip"), w = $("#mapwrap").getBoundingClientRect(); t.innerHTML = html; t.style.display = "block"; const x = ev.clientX - w.left + 14, y = ev.clientY - w.top + 14; t.style.left = Math.min(x, w.width - 230) + "px"; t.style.top = Math.min(y, w.height - 70) + "px"; }
+function hideTip(){ $("#maptip").style.display = "none"; }
+$("#mapwrap").addEventListener("mousemove", ev => { const t = $("#maptip"); if (t.style.display === "block") tip(ev, t.innerHTML); });
+function applyZoom(){ const z = state.zoom, w = 1000 / z, h = 480 / z; $("#map").setAttribute("viewBox", `${(1000 - w) / 2 + (z > 1 ? 60 : 0)} ${(480 - h) / 2} ${w} ${h}`); }
+$("#zin").addEventListener("click", () => { state.zoom = Math.min(2.5, state.zoom * 1.25); applyZoom(); });
+$("#zout").addEventListener("click", () => { state.zoom = Math.max(1, state.zoom / 1.25); applyZoom(); });
+$("#zfit").addEventListener("click", () => { state.zoom = 1; applyZoom(); });
+$("#basemap").addEventListener("click", e => { const b = e.target.closest("[data-base]"); if (!b) return; state.base = b.dataset.base; document.querySelectorAll("#basemap button").forEach(x => x.setAttribute("aria-pressed", x === b)); buildMap(); });
+
+/* ---------------- cards / AI / steps ---------------- */
+const lvl = v => ({ hi:"High", md:"Medium", lo:"Low" })[v];
+function renderCards(){
+  $("#cards").innerHTML = ["B","A","C"].map(id => { const r = ROUTES[id], total = Object.values(r.counts).reduce((a,b)=>a+b,0);
+    const inv = v => ({ hi:"lo", md:"md", lo:"hi" })[v]; // permitting complexity: high is bad
+    return `<button type="button" class="rcard" data-route="${id}" aria-pressed="${state.route===id}">
+      <div class="h"><i style="background:${r.color}"></i>${r.name}${r.rec?`<span class="rec">Recommended ✓</span>`:""}</div>
+      <dl><dt>Length</dt><dd class="num">${fmt(r.length,1)} km</dd><dt>Features</dt><dd class="num">${total}</dd><dt>Route score</dt><dd class="num">${r.score}/100</dd>
+      <dt>Constructability</dt><dd class="num">${r.factors.constructability}</dd><dt>Environmental impact</dt><dd class="num">${r.factors.environmental}</dd>
+      <dt>Permitting complexity</dt><dd class="${inv(r.permitting)}">${lvl(r.permitting)}</dd><dt>Access &amp; logistics</dt><dd class="${r.access}">${lvl(r.access)}</dd><dt>Expansion readiness</dt><dd class="${r.expansion}">${lvl(r.expansion)}</dd></dl>
+      <div class="stars"><span>Overall rating</span><span class="s" aria-label="${r.stars} of 5">${"★".repeat(Math.floor(r.stars))}${r.stars%1?"½":""}${"☆".repeat(5-Math.ceil(r.stars))}</span></div></button>`; }).join("");
+}
+$("#cards").addEventListener("click", e => { const b = e.target.closest("[data-route]"); if (b) selectRoute(b.dataset.route); });
+function aiBlock(r){ return `<div class="cols"><div><h4 class="adv">Advantages</h4><ul>${r.adv.map(a=>`<li>${a}</li>`).join("")}</ul></div><div><h4 class="con">Concerns</h4><ul>${r.con.map(a=>`<li>${a}</li>`).join("")}</ul></div></div><div class="rec"><b>AI recommendation</b>${r.summary}</div>`; }
+function renderAI(){ const r = ROUTES[state.route]; $("#ai").innerHTML = aiBlock(r); $("#ai-route").textContent = r.name; }
+function renderSteps(){ $("#steps").innerHTML = STEPS.map(([t,s,c],i) => `<div class="step ${c}"><div class="n">${c==="done"?"✓":i+1}</div><div><div class="t">${t}</div><div class="s">${s}</div></div></div>`).join(""); }
+$("#proceed").addEventListener("click", () => { STEPS[1] = ["AI route analysis","Complete","done"]; STEPS[2] = ["Preliminary estimate","In progress","now"]; renderSteps(); $("#proceed").disabled = true; $("#proceed").textContent = "Phase 2 started"; toast(`${ROUTES[state.route].name} carried into Phase 2 · preliminary estimate`); });
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 3200); }
+
+/* ---------------- right rail ---------------- */
+function renderRail(){
+  const r = ROUTES[state.route], C = 2 * Math.PI * 34;
+  $("#ring").innerHTML = `<svg viewBox="0 0 78 78"><circle cx="39" cy="39" r="34" fill="none" stroke="#1a2531" stroke-width="6"/><circle cx="39" cy="39" r="34" fill="none" stroke="${r.color}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C * r.score / 100} ${C}"/></svg><div class="c"><div><div class="n">${r.score}</div><div class="d">/100</div></div></div>`;
+  $("#scorebars").innerHTML = FACTORS.map(([k,n]) => `<div class="bar"><span class="l"><span>${n}</span></span><span class="num" style="text-align:right;font-weight:600">${r.factors[k]}</span><span class="tr"><span class="fl" style="width:${r.factors[k]}%;background:${r.color}"></span></span></div>`).join("");
+  const total = Object.values(r.counts).reduce((a,b)=>a+b,0);
+  $("#fs-total").textContent = `${total} total`;
+  $("#fsum").innerHTML = Object.entries(r.counts).map(([k,v]) => `<div class="r"><i style="background:${FTYPES[k].color}"></i><span>${FTYPES[k].name}${v!==1?"s":""}</span><span class="c num">${v}</span><span class="imp ${r.impacts[k]}">Impact: ${IMPACT[r.impacts[k]]}</span></div>`).join("");
+  $("#terrain").innerHTML = profileSVG(r, DERIVED[state.route].prof, 250, 96, false);
+  $("#tstats").innerHTML = `<div>Elevation range<b>${r.terrain.min}–${r.terrain.max} m</b></div><div>Avg slope<b>${r.terrain.slope}%</b></div><div>Terrain<b>${r.terrain.flat}% flat</b></div>`;
+  const cl = r.confidence >= 90 ? ["High confidence", "Route data quality is high with strong AI validation.", "var(--good)"] : r.confidence >= 85 ? ["Moderate confidence", "Survey gaps south of the rail line reduce certainty; field validation recommended.", "var(--warn)"] : ["Low confidence","",  "var(--crit)"];
+  $("#conf").innerHTML = `<div class="pct" style="border-color:${cl[2]};color:${cl[2]}">${r.confidence}%</div><div class="t"><b style="color:${cl[2]}">${cl[0]}</b>${cl[1]}</div>`;
+}
+function profileSVG(r, prof, W, H, big){
+  const padL = big ? 42 : 30, padR = 10, padT = 10, padB = big ? 26 : 18, w = W - padL - padR, h = H - padT - padB;
+  const lo = Math.floor(r.terrain.min / 10) * 10, hi = Math.ceil(r.terrain.max / 10) * 10;
+  const x = i => padL + (i / (prof.length - 1)) * w, y = v => padT + h - ((v - lo) / (hi - lo)) * h;
+  const pts = prof.map((v,i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const ticksY = big ? [lo, lo + (hi-lo)/2, hi] : [lo, hi], ticksX = big ? [0,5,10,15,r.length] : [0,5,10,r.length];
+  const ids = big ? "pbig" : "psmall";
+  return `<svg viewBox="0 0 ${W} ${H}" id="${ids}" data-len="${r.length}" data-lo="${lo}" data-hi="${hi}" style="font-family:var(--mono)">
+    <defs><linearGradient id="${ids}-g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${r.color}" stop-opacity=".45"/><stop offset="1" stop-color="${r.color}" stop-opacity=".03"/></linearGradient></defs>
+    ${ticksY.map(t => `<line x1="${padL}" x2="${W-padR}" y1="${y(t)}" y2="${y(t)}" stroke="#22303d" stroke-width="1"/><text x="${padL-4}" y="${y(t)+3}" text-anchor="end" font-size="${big?10:8}" fill="#8b9bab">${Math.round(t)}</text>`).join("")}
+    ${ticksX.map(t => `<text x="${x((t / r.length) * (prof.length-1))}" y="${H-4}" text-anchor="${t===0?"start":t===r.length?"end":"middle"}" font-size="${big?10:8}" fill="#8b9bab">${t===r.length?fmt(t,1):t} km</text>`).join("")}
+    <polygon points="${padL},${padT+h} ${pts} ${(padL+w).toFixed(1)},${padT+h}" fill="url(#${ids}-g)"/>
+    <polyline points="${pts}" fill="none" stroke="${r.color}" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="${x(prof.length-1)}" cy="${y(prof[prof.length-1])}" r="3.5" fill="${r.color}" stroke="#121a22" stroke-width="2"/>
+    <g class="xh" style="display:none"><line y1="${padT}" y2="${padT+h}" stroke="#8b9bab" stroke-dasharray="3 3"/><circle r="4" fill="#e6edf3" stroke="${r.color}" stroke-width="2"/><rect rx="3" fill="#0b1016" stroke="#22303d" height="${big?30:22}" width="${big?118:96}"/><text font-size="${big?10:8.5}" fill="#e6edf3"></text><text font-size="${big?9:7.5}" fill="#8b9bab"></text></g>
+    <rect class="hitarea" x="${padL}" y="${padT}" width="${w}" height="${h}" fill="transparent" data-padl="${padL}" data-w="${w}" data-padt="${padT}" data-h="${h}"/>
+  </svg>`;
+}
+function wireProfile(svgId, prof, r){
+  const svg = document.getElementById(svgId); if (!svg) return;
+  const hit = svg.querySelector(".hitarea"), xh = svg.querySelector(".xh"), [ln, c, rect, t1, t2] = xh.children;
+  const padL = +hit.dataset.padl, w = +hit.dataset.w, padT = +hit.dataset.padt, h = +hit.dataset.h, lo = +svg.dataset.lo, hi = +svg.dataset.hi, W = svg.viewBox.baseVal.width;
+  hit.addEventListener("mousemove", ev => {
+    const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const i = Math.round(Math.max(0, Math.min(1, (p.x - padL) / w)) * (prof.length - 1)), v = prof[i], x = padL + (i / (prof.length - 1)) * w, y = padT + h - ((v - lo) / (hi - lo)) * h;
+    const grade = i > 0 ? ((prof[i] - prof[i-1]) / 250 * 100) : 0, km = (i / (prof.length - 1)) * r.length;
+    xh.style.display = ""; ln.setAttribute("x1", x); ln.setAttribute("x2", x); c.setAttribute("cx", x); c.setAttribute("cy", y);
+    const bw = +rect.getAttribute("width"), bx = Math.min(x + 8, W - bw - 4), by = Math.max(padT, y - 36);
+    rect.setAttribute("x", bx); rect.setAttribute("y", by); t1.setAttribute("x", bx + 6); t1.setAttribute("y", by + 11); t2.setAttribute("x", bx + 6); t2.setAttribute("y", by + 21);
+    t1.textContent = `KP ${fmt(km,2)} · ${fmt(v,1)} m`; t2.textContent = `grade ${grade >= 0 ? "+" : ""}${fmt(grade,1)}%`;
+  });
+  hit.addEventListener("mouseleave", () => xh.style.display = "none");
+}
+
+/* ---------------- secondary views ---------------- */
+function renderView(){
+  const r = ROUTES[state.route];
+  if (state.tab === "ai"){ $("#ai-all").innerHTML = ["B","A","C"].map(id => { const x = ROUTES[id]; return `<div class="panel ai"><div class="ph"><span class="eyebrow" style="color:${x.color}">${x.name}${x.rec?" · recommended":""}</span><span class="eyebrow num">${x.score}/100</span></div><div class="pb">${aiBlock(x)}</div></div>`; }).join(""); }
+  if (state.tab === "features"){ $("#f-route").value = state.route; const sel = $("#f-type"); if (sel.options.length === 1) for (const k in FTYPES) sel.add(new Option(FTYPES[k].name, k)); renderFeatures(); }
+  if (state.tab === "profile"){ $("#prof-title").textContent = `${r.name} · HUB 1 → Kerrobert Terminal`; $("#profile-big").innerHTML = profileSVG(r, DERIVED[state.route].prof, 900, 260, true); wireProfile("pbig", DERIVED[state.route].prof, r);
+    const p = DERIVED[state.route].prof, gain = p.reduce((a,v,i) => a + (i && v > p[i-1] ? v - p[i-1] : 0), 0);
+    $("#prof-stats").innerHTML = `<div>Elevation range<b>${r.terrain.min}–${r.terrain.max} m</b></div><div>Average slope<b>${r.terrain.slope}%</b></div><div>Under 2% grade<b>${r.terrain.flat}% of route</b></div><div>Cumulative gain<b>${fmt(gain,0)} m</b></div>`; }
+  if (state.tab === "compare"){
+    const rows = [["Length","km",x => fmt(x.length,1)],["Features","count",x => Object.values(x.counts).reduce((a,b)=>a+b,0)],["Route score","/100",x => x.score],["Confidence","%",x => x.confidence],
+      ...FACTORS.map(([k,n]) => [n,"/100",x => x.factors[k]]),
+      ...Object.keys(FTYPES).map(k => [FTYPES[k].name + "s","count",x => `${x.counts[k]} <span class="imp ${x.impacts[k]}">${IMPACT[x.impacts[k]]}</span>`]),
+      ["Permitting complexity","",x => lvl(x.permitting)],["Access & logistics","",x => lvl(x.access)],["Expansion readiness","",x => lvl(x.expansion)],
+      ["Elevation range","m",x => `${x.terrain.min}–${x.terrain.max}`],["Average slope","%",x => x.terrain.slope],["Terrain flat","%",x => x.terrain.flat],["Overall rating","/5",x => x.stars]];
+    $("#ctable").innerHTML = `<thead><tr><th>Factor</th><th>Unit</th>${["B","A","C"].map(id => `<th class="n" style="color:${ROUTES[id].color}">${ROUTES[id].name}${ROUTES[id].rec?" ✓":""}</th>`).join("")}</tr></thead><tbody>${rows.map(([n,u,f]) => `<tr><td>${n}</td><td style="color:var(--muted)">${u}</td>${["B","A","C"].map(id => `<td class="n">${f(ROUTES[id])}</td>`).join("")}</tr>`).join("")}</tbody>`;
+  }
+  if (state.tab === "reports"){
+    const total = Object.values(r.counts).reduce((a,b)=>a+b,0);
+    $("#memo").innerHTML = `<div class="meta"><span>Project</span><b>Kerrobert Gathering System, Phase 1 routing</b><span>Prepared for</span><b>Executive steering, DMSV Group</b><span>Study area</span><b>RM of Oakdale No. 320, Kerrobert, Saskatchewan</b><span>Status</span><b>Routing complete · AI route analysis in progress</b></div>
+      <h3>Decision requested</h3><p>Approve <b style="color:${ROUTES.B.color}">Route B</b> as the Phase 1 preferred corridor and release Phase 2, preliminary estimate. No cost figures are included in this memo by design; Phase 1 judges routes on constructability and risk alone.</p>
+      <h3>Basis</h3><p>Three corridors were evaluated from HUB 1 to Kerrobert Terminal within a 1.0 km study buffer. Route B is the shortest at ${fmt(ROUTES.B.length,1)} km, follows the existing 8-inch gathering corridor for 80% of its length, and scores ${ROUTES.B.score}/100 on the six-factor model at ${ROUTES.B.confidence}% confidence. Route A scores ${ROUTES.A.score} and Route C ${ROUTES.C.score}.</p>
+      <h3>Selected corridor, ${r.name}</h3><p>${r.summary} The corridor carries ${total} identified features: ${Object.entries(r.counts).map(([k,v]) => `${v} ${FTYPES[k].name.toLowerCase()}${v!==1?"s":""}`).join(", ")}. Terrain is ${r.terrain.flat}% flat with an average slope of ${r.terrain.slope}% and an elevation range of ${r.terrain.min}–${r.terrain.max} m.</p>
+      <h3>Risks carried forward</h3><p>${r.con.join(". ")}.</p>
+      <h3>Next steps</h3><p>1. Close AI route analysis and freeze the Route B centreline. 2. Release Phase 2, preliminary estimate, for Route B only. 3. Open permit pre-applications for the two rail crossings, given the 6–9 month lead time. 4. Schedule wetland survey at KP 12–14 before the October construction window.</p>`;
+  }
+}
+function renderFeatures(){
+  const id = $("#f-route").value, type = $("#f-type").value, q = $("#f-q").value.trim().toLowerCase(), r = ROUTES[id];
+  const rows = DERIVED[id].feats.filter(f => (!type || f.type === type) && (!q || (`kp ${f.kp} ${FTYPES[f.type].name} ${f.note} ${IMPACT[f.imp]}`).toLowerCase().includes(q)));
+  $("#f-count").textContent = `${rows.length} of ${DERIVED[id].feats.length} features · ${r.name}`;
+  $("#ftable tbody").innerHTML = rows.slice(0, 400).map(f => `<tr><td class="n">${fmt(f.kp,2)}</td><td><span class="dot" style="background:${FTYPES[f.type].color}"></span>${FTYPES[f.type].name}</td><td><span class="imp ${f.imp}">${IMPACT[f.imp]}</span></td><td>${FTYPES[f.type].method}</td><td style="color:var(--muted)">${esc(f.note)}</td></tr>`).join("") || `<tr><td colspan="5" style="color:var(--muted)">No features match.</td></tr>`;
+}
+["f-route","f-type"].forEach(id => $("#"+id).addEventListener("change", renderFeatures)); $("#f-q").addEventListener("input", renderFeatures);
+
+/* ---------------- selection + boot ---------------- */
+function selectRoute(id){ state.route = id; renderKpis(); buildMap(); renderCards(); renderAI(); renderRail(); wireProfile("psmall", DERIVED[id].prof, ROUTES[id]); renderView(); }
+renderTabs(); renderLayers(); renderSteps(); selectRoute("B");
+</script>
