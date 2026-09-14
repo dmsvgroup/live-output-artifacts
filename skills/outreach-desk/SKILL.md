@@ -18,7 +18,8 @@ and these capabilities:
 { "db": {}, "sample": {}, "downloads": true,
   "mcp": { "servers": [
     { "server": "Gmail", "tools": ["search_threads", "get_thread", "create_draft"] },
-    { "server": "Google Calendar", "tools": ["list_events"] } ] } }
+    { "server": "Google Calendar", "tools": ["list_events"] },
+    { "server": "Claude N8N", "tools": ["search_workflows", "search_workflow_executions"] } ] } }
 ```
 
 - **db** holds `settings/main`, `contacts/*`, `queue/*` (drafts awaiting approval),
@@ -30,6 +31,7 @@ and these capabilities:
 - **mcp** reads recent inbox threads and replies from CRM addresses, reads a thread in
   full for follow-ups, and creates Gmail drafts on approval. Calendar lists upcoming
   events. Every failure is branched by error code; the page degrades per section.
+- **Agents tab**: watches the n8n connector (`search_workflows` every 2 min, `search_workflow_executions` every 1 min) and shows each Rockstar agent's state, last run, 24-hour success/failure counts, and the 30 most recent runs. Today carries a compact "Agents running" card. Hosted mode shows a not-linked notice.
 - Without `db` the page runs local-only (browser storage); without `mcp` it still drafts
   and approves, and the user copies text into Gmail or LinkedIn.
 

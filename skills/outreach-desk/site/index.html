@@ -237,6 +237,7 @@
           <div class="card"><div class="ch"><h3>Agent activity</h3><button class="btn sm" type="button" data-go="activity">All activity</button></div><div class="cb feed" id="feed-short"></div></div>
         </div>
         <div class="grid" style="gap:14px">
+          <div class="card"><div class="ch"><h3>Agents running</h3><button class="btn sm" type="button" data-go="agents">All agents</button></div><div class="cb" id="ag-short"></div></div>
           <div class="card"><div class="ch"><h3>Upcoming meetings</h3><span class="note" id="cal-fresh"></span></div><div class="cb" id="cal-short"></div></div>
           <div class="card"><div class="ch"><h3>Guardrails</h3></div><div class="cb lint" id="guard"></div></div>
         </div>
@@ -299,6 +300,15 @@
     <section class="view" id="v-videos">
       <div class="filters"><input type="search" id="v-q" placeholder="Search videos…"><span style="flex:1"></span><button class="btn sm primary" type="button" id="btn-video">Add video</button></div>
       <div class="vcards" id="vcards"></div>
+    </section>
+
+    <!-- ===== AGENTS ===== -->
+    <section class="view" id="v-agents">
+      <div class="grid g4" id="ag-tiles" style="margin-bottom:12px"></div>
+      <div class="grid g-main">
+        <div class="card"><div class="ch"><h3>Agents · n8n workflows</h3><span class="note" id="ag-fresh"></span></div><div class="cb tablewrap" style="padding:0"><table id="ag-table"><thead><tr><th>Agent</th><th>State</th><th>Last run</th><th>24h</th><th class="n">Runs</th></tr></thead><tbody></tbody></table></div></div>
+        <div class="card"><div class="ch"><h3>Recent runs</h3><span class="note" id="ag-runs-count"></span></div><div class="cb list" id="ag-runs"></div></div>
+      </div>
     </section>
 
     <!-- ===== ACTIVITY ===== -->
@@ -380,9 +390,10 @@ const VIEWS = [
   ["calendar","Calendar","Meetings from your Google Calendar, with prep built from the CRM."],
   ["projects","Projects","What's in motion with clients and partners."],
   ["videos","Video library","Looms, demos and replays you send instead of pitching."],
+  ["agents","Agents","Your Rockstar agents in n8n: which are on, what ran, what failed."],
   ["activity","Activity","Everything the agent and you did, newest first."],
 ];
-const ICONS = { today:'<path d="M3 12h18M12 3v18"/>', approvals:'<path d="M4 12l5 5L20 6"/>', contacts:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>', inbox:'<path d="M3 5h18v14H3z"/><path d="M3 7l9 6 9-6"/>', calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>', projects:'<rect x="3" y="4" width="7" height="16"/><rect x="14" y="4" width="7" height="10"/>', videos:'<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>', activity:'<path d="M3 12h4l3-8 4 16 3-8h4"/>' };
+const ICONS = { today:'<path d="M3 12h18M12 3v18"/>', approvals:'<path d="M4 12l5 5L20 6"/>', contacts:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>', inbox:'<path d="M3 5h18v14H3z"/><path d="M3 7l9 6 9-6"/>', calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>', projects:'<rect x="3" y="4" width="7" height="16"/><rect x="14" y="4" width="7" height="10"/>', videos:'<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>', activity:'<path d="M3 12h4l3-8 4 16 3-8h4"/>', agents:'<circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="20" r="2"/>' };
 const RAMP = [[1,10],[2,10],[3,10],[4,15],[5,15],[6,20],[7,20],[8,25],[9,25],[10,25],[11,40],[12,40],[13,40],[14,40],[15,60]];
 const CLICHES = ["i hope this email finds you well","i hope this finds you well","quick question","quick call","quick favor","quick favour","synerg","leverage","cutting-edge","best-of-breed","game-chang","paradigm","i came across your profile","hope you're well","hope you are well","in today's fast-paced","don't hesitate","circle back","touch base"];
 const FOLLOWUP_STEPS = ["ANSWER QUESTION","SEND LEAD MAGNET","SEND CALENDAR","ACKNOWLEDGE NO","CONTINUE CONVERSATION","NO FOLLOW-UP NEEDED"];
@@ -432,7 +443,7 @@ const store = {
 };
 
 /* ============ state ============ */
-const S = { view:"today", settings:{ ...DEFAULT_SETTINGS }, contacts:[], queue:[], projects:[], videos:[], activity:[], log:{ items:[] }, events:[], evFresh:null, replies:[], repFresh:null, inbox:[], inbFresh:null, sel:new Set(), sample:null, mcp:null, downloads:null, mcpOk:{ gmail:"unknown", cal:"unknown" }, busy:false, editing:null };
+const S = { view:"today", settings:{ ...DEFAULT_SETTINGS }, contacts:[], queue:[], projects:[], videos:[], activity:[], log:{ items:[] }, events:[], evFresh:null, replies:[], repFresh:null, inbox:[], inbFresh:null, workflows:[], runs:[], agFresh:null, agState:"unknown", sel:new Set(), sample:null, mcp:null, downloads:null, mcpOk:{ gmail:"unknown", cal:"unknown" }, busy:false, editing:null };
 
 
 /* ============ hosted mode (page served from your own web server, no claude.ai runtime) ============ */
@@ -505,6 +516,7 @@ function renderToday(){
   if (!S.contacts.length) moves.push({ t:"Import your contacts", d:"Paste rows from the Meta-dology CRM sheet or any export.", btn:`<button class="btn sm primary" type="button" data-go="contacts">Open contacts</button>` });
   $("#moves").innerHTML = moves.length ? moves.map(m => `<div class="row">${m.av ? `<div class="av ${stageClass(m.av.stage)}">${initials(m.av)}</div>` : `<div class="av cold">·</div>`}<div><div class="t">${esc(m.t)}</div><div class="d">${esc(m.d)}</div></div><div>${m.btn}</div></div>`).join("") : `<div class="empty"><b>Nothing waiting</b>Analyze a few contacts and draft the first email.</div>`;
   $("#feed-short").innerHTML = feedHTML(S.activity.slice(0, 6));
+  renderAgentsShort();
   $("#cal-short").innerHTML = eventsHTML(S.events.slice(0, 4), true);
   $("#cal-fresh").textContent = S.evFresh ? "updated " + ago(S.evFresh) : (S.mcpOk.cal === "unknown" ? "" : S.mcpOk.cal);
   const g = [];
@@ -812,6 +824,38 @@ document.addEventListener("click", async e => { const b = e.target.closest("[dat
 $("#vd-save").addEventListener("click", async () => { const title = $("#vd-title").value.trim(), url = $("#vd-url").value.trim(); if (!title || !/^https?:\/\//.test(url)){ toast("Title and a full link are required"); return; } const id = editingV ? editingV.id : uid(); await store.set("videos", id, { id, title, url, kind:$("#vd-kind").value, len:$("#vd-len").value.trim(), note:$("#vd-note").value.trim(), updatedAt:Date.now() }); $("#m-video").classList.remove("on"); });
 $("#vd-delete").addEventListener("click", async () => { if (editingV && confirm("Delete this video?")){ await store.del("videos", editingV.id); $("#m-video").classList.remove("on"); } });
 
+
+/* ============ AGENTS (n8n workflows = Rockstar agents) ============ */
+const dur = (a, b) => { const ms = new Date(b) - new Date(a); if (!(ms >= 0)) return ""; return ms < 1000 ? ms + " ms" : ms < 60000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms / 60000) + " min"; };
+const runTag = st => ({ success:"good", error:"crit", crashed:"crit", running:"info", waiting:"amber", new:"amber", canceled:"" })[st] || "";
+function agentStats(){
+  const byWf = {}; const cutoff = Date.now() - 86400000;
+  S.runs.forEach(r => { const o = byWf[r.workflowId] = byWf[r.workflowId] || { last:null, ok:0, err:0, n:0, running:0 }; o.n++; if (!o.last || r.startedAt > o.last.startedAt) o.last = r; if (new Date(r.startedAt) > cutoff){ if (r.status === "success") o.ok++; else if (["error","crashed"].includes(r.status)) o.err++; } if (["running","new","waiting"].includes(r.status)) o.running++; });
+  return byWf;
+}
+function agentsUnavailable(short){ return `<div class="empty">${HOSTED ? (short ? "Agents aren't linked on the web version." : "<b>Agents aren't linked on the web version</b>The claude.ai copy of this page watches your n8n workflows live.") : (S.agState === "unknown" ? "Loading agents…" : esc(S.agState))}</div>`; }
+function renderAgentsShort(){
+  const el = $("#ag-short"); if (!el) return;
+  if (!S.mcp || !S.workflows.length){ el.innerHTML = agentsUnavailable(true); return; }
+  const st = agentStats(), running = S.runs.filter(r => ["running","new","waiting"].includes(r.status)), errs = S.runs.filter(r => ["error","crashed"].includes(r.status)).slice(0, 2);
+  const wfName = id => (S.workflows.find(w => w.id === id) || {}).name || id;
+  el.innerHTML = `<div class="row"><div class="av ${running.length ? "" : "cold"}">${running.length}</div><div><div class="t">${running.length ? running.length + " running now" : "Nothing running"}</div><div class="d">${S.workflows.filter(w => w.active).length} of ${S.workflows.length} agents active · ${S.runs.length} recent runs</div></div><div class="note">${S.agFresh ? ago(S.agFresh) : ""}</div></div>` +
+    errs.map(r => `<div class="row"><div class="av cold" style="color:var(--crit)">!</div><div><div class="t">${esc(wfName(r.workflowId))}</div><div class="d">${r.status} · ${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</div></div><div><span class="tag crit">${r.status}</span></div></div>`).join("");
+}
+function renderAgents(){
+  $("#ag-fresh").textContent = S.agFresh ? "updated " + ago(S.agFresh) : "";
+  if (!S.mcp){ $("#ag-tiles").innerHTML = ""; $("#ag-table tbody").innerHTML = `<tr><td colspan="5">${agentsUnavailable(false)}</td></tr>`; $("#ag-runs").innerHTML = ""; $("#ag-runs-count").textContent = ""; return; }
+  const st = agentStats(), running = S.runs.filter(r => ["running","new","waiting"].includes(r.status)).length, err24 = S.runs.filter(r => ["error","crashed"].includes(r.status) && new Date(r.startedAt) > Date.now() - 86400000).length, ok24 = S.runs.filter(r => r.status === "success" && new Date(r.startedAt) > Date.now() - 86400000).length;
+  $("#ag-tiles").innerHTML = [["Agents active", `${S.workflows.filter(w => w.active).length} <small>of ${S.workflows.length}</small>`, "n8n workflows switched on"],["Running now", running, "executions in progress"],["Succeeded · 24h", ok24, "completed runs"],["Failed · 24h", err24, err24 ? "open the run in n8n to see the node that failed" : "no failures"]]
+    .map(([l,v,d]) => `<div class="card tile"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${d}</div></div>`).join("");
+  const rows = [...S.workflows].sort((a,b) => (b.active - a.active) || ((st[b.id] || {}).n || 0) - ((st[a.id] || {}).n || 0) || a.name.localeCompare(b.name));
+  $("#ag-table tbody").innerHTML = rows.length ? rows.map(w => { const o = st[w.id] || { last:null, ok:0, err:0, n:0, running:0 };
+    return `<tr><td><b>${esc(w.name)}</b>${w.description ? `<div class="note">${esc(w.description)}</div>` : ""}</td><td>${o.running ? '<span class="tag info">running</span>' : w.active ? '<span class="tag good">active</span>' : '<span class="tag">off</span>'}</td><td>${o.last ? `<span class="tag ${runTag(o.last.status)}">${o.last.status}</span> <span class="note">${fmtDate(o.last.startedAt)} ${fmtTime(o.last.startedAt)}</span>` : '<span class="note">no recent runs</span>'}</td><td class="note">${o.ok || o.err ? `${o.ok} ok${o.err ? ` · <span style="color:var(--crit)">${o.err} failed</span>` : ""}` : "—"}</td><td class="n">${o.n}</td></tr>`; }).join("") : `<tr><td colspan="5">${agentsUnavailable(false)}</td></tr>`;
+  const wfName = id => (S.workflows.find(w => w.id === id) || {}).name || id;
+  $("#ag-runs-count").textContent = `${S.runs.length} most recent`;
+  $("#ag-runs").innerHTML = S.runs.length ? S.runs.slice(0, 30).map(r => `<div class="row"><div class="av ${r.status === "success" ? "past" : ["error","crashed"].includes(r.status) ? "cold" : "warm"}" style="${["error","crashed"].includes(r.status) ? "color:var(--crit)" : ""}">${r.status === "success" ? "✓" : ["error","crashed"].includes(r.status) ? "!" : "…"}</div><div><div class="t">${esc(wfName(r.workflowId))}</div><div class="d">${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)} · ${r.mode} · ${r.stoppedAt ? dur(r.startedAt, r.stoppedAt) : "in progress"}</div></div><div><span class="tag ${runTag(r.status)}">${r.status}</span></div></div>`).join("") : `<div class="empty">No runs yet.</div>`;
+}
+
 /* ============ ACTIVITY ============ */
 function feedHTML(items){ if (!items.length) return `<div class="empty">Nothing yet.</div>`; return items.map(i => `<div class="fi"><div class="who ${i.who}">${i.who === "agent" ? "AI" : i.who === "you" ? "YOU" : "SYS"}</div><div>${esc(i.text)}</div><div class="at">${ago(i.at)}</div></div>`).join(""); }
 function renderActivity(){ $("#feed").innerHTML = feedHTML(S.activity); $("#feed-count").textContent = `${S.activity.length} entries`; }
@@ -826,7 +870,7 @@ $$("[data-close]").forEach(b => b.addEventListener("click", () => b.closest(".mo
 $$(".modal").forEach(m => m.addEventListener("click", e => { if (e.target === m) m.classList.remove("on"); }));
 
 /* ============ render dispatch ============ */
-function renderView(){ renderHead(); ({ today:renderToday, approvals:renderApprovals, contacts:renderContacts, inbox:renderInbox, calendar:renderCalendar, projects:renderProjects, videos:renderVideos, activity:renderActivity })[S.view](); }
+function renderView(){ renderHead(); ({ today:renderToday, approvals:renderApprovals, contacts:renderContacts, inbox:renderInbox, calendar:renderCalendar, projects:renderProjects, videos:renderVideos, activity:renderActivity, agents:renderAgents })[S.view](); }
 function renderAll(){ renderNav(); renderView(); }
 
 /* ============ boot ============ */
@@ -868,6 +912,16 @@ async function boot(){
     else { const c = ev.error.code; S.mcpOk.gmail = c === "needs_reauth" ? "Reconnect Gmail in Settings → Connectors" : c === "server_not_connected" ? "Add Gmail in Settings → Connectors" : c === "not_in_manifest" ? "Gmail not allowed for this page" : "Gmail unavailable right now"; if (["needs_reauth","server_not_connected","not_in_manifest","blocked_by_policy"].includes(c)) S.inbox = []; setConn("gmail", "warn", S.mcpOk.gmail); }
     if (S.view === "inbox") renderView();
   }, { refetchInterval:300000 });
+  S.mcp.watchTool("Claude N8N", "search_workflows", { limit:50, sortBy:"updatedAt:desc" }, ev => {
+    if (ev.type === "data"){ const p = ev.result.payload || {}; S.workflows = (p.data || []).map(w => ({ id:w.id, name:w.name, active:!!w.active, description:w.description || "", updatedAt:w.updatedAt })); S.agFresh = ev.result.cache ? ev.result.cache.storedAt : Date.now(); S.agState = "connected"; }
+    else { const c = ev.error.code; S.agState = c === "needs_reauth" ? "Reconnect n8n in Settings → Connectors" : c === "server_not_connected" ? "Add the n8n connector in Settings → Connectors" : c === "not_in_manifest" ? "n8n not allowed for this page" : "n8n unavailable right now"; if (["needs_reauth","server_not_connected","not_in_manifest","blocked_by_policy"].includes(c)) S.workflows = []; }
+    if (S.view === "agents" || S.view === "today") renderView();
+  }, { refetchInterval:120000 });
+  S.mcp.watchTool("Claude N8N", "search_workflow_executions", { limit:50 }, ev => {
+    if (ev.type === "data"){ const p = ev.result.payload || {}; S.runs = (p.data || []).map(r => ({ id:r.id, workflowId:r.workflowId, status:r.status, mode:r.mode, startedAt:r.startedAt, stoppedAt:r.stoppedAt })); S.agFresh = ev.result.cache ? ev.result.cache.storedAt : Date.now(); }
+    else if (["needs_reauth","server_not_connected","not_in_manifest","blocked_by_policy"].includes(ev.error.code)) S.runs = [];
+    if (S.view === "agents" || S.view === "today") renderView();
+  }, { refetchInterval:60000 });
   watchReplies();
 }
 let repliesUnsub = null, repliesKey = "";
